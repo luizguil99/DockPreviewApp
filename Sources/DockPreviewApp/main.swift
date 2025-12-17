@@ -30,9 +30,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("Status item created: \(statusItem != nil)")
         
         if let button = statusItem?.button {
-            button.title = "DP"
-            button.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-            print("Button title set to 'DP'")
+            // Use SF Symbol for macOS 11+
+            if let image = NSImage(systemSymbolName: "rectangle.stack", accessibilityDescription: "DockPreview") {
+                image.isTemplate = true
+                button.image = image
+                print("Button icon set")
+            } else {
+                button.title = "DP"
+                print("Fallback to text 'DP'")
+            }
         } else {
             print("ERROR: No button!")
         }

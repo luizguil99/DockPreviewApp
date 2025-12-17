@@ -2,70 +2,103 @@ import SwiftUI
 import AppKit
 import Combine
 
+struct WindowPreviewCard: View {
+    let window: AppWindow
+    let onSelect: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .topTrailing) {
+                if let nsImage = window.image {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 160, height: 100)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(
+                                    isHovered ? Color.blue : (window.isMinimized ? Color.yellow.opacity(0.5) : Color.white.opacity(0.2)),
+                                    lineWidth: isHovered ? 2 : (window.isMinimized ? 2 : 1)
+                                )
+                        )
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.5))
+                        .frame(width: 160, height: 100)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(isHovered ? Color.blue : Color.white.opacity(0.2), lineWidth: isHovered ? 2 : 1)
+                        )
+                }
+                
+                // Minimized badge
+                if window.isMinimized {
+                    Image(systemName: "minus.circle.fill")
+                        .foregroundColor(.yellow)
+                        .background(Circle().fill(Color.black.opacity(0.6)))
+                        .font(.system(size: 18))
+                        .offset(x: 4, y: -4)
+                }
+            }
+            
+            HStack(spacing: 4) {
+                if window.isMinimized {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .font(.system(size: 8))
+                        .foregroundColor(.yellow)
+                }
+                Text(window.title)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundColor(window.isMinimized ? .yellow : .white)
+            }
+            .frame(width: 160)
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovered ? Color.blue.opacity(0.3) : Color.black.opacity(window.isMinimized ? 0.7 : 0.5))
+        )
+        .scaleEffect(isHovered ? 1.05 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            onSelect()
+        }
+    }
+}
+
 struct PreviewOverlay: View {
     let windows: [AppWindow]
     let onSelect: (AppWindow) -> Void
+    let maxWidth: CGFloat
     
     var body: some View {
-        HStack(spacing: 12) {
+        Group {
             if windows.isEmpty {
                 Text("No open windows")
                     .foregroundColor(.white)
                     .padding()
             } else {
-                ForEach(windows, id: \.id) { window in
-                    VStack {
-                        ZStack(alignment: .topTrailing) {
-                            if let nsImage = window.image {
-                                Image(nsImage: nsImage)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 160, height: 100)
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(window.isMinimized ? Color.yellow.opacity(0.5) : Color.white.opacity(0.2), lineWidth: window.isMinimized ? 2 : 1)
-                                    )
-                            } else {
-                                Rectangle()
-                                    .fill(Color.gray)
-                                    .frame(width: 160, height: 100)
-                                    .cornerRadius(8)
-                            }
-                            
-                            // Minimized badge
-                            if window.isMinimized {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundColor(.yellow)
-                                    .background(Circle().fill(Color.black.opacity(0.6)))
-                                    .font(.system(size: 18))
-                                    .offset(x: 4, y: -4)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(windows, id: \.id) { window in
+                            WindowPreviewCard(window: window) {
+                                onSelect(window)
                             }
                         }
-                        
-                        HStack(spacing: 4) {
-                            if window.isMinimized {
-                                Image(systemName: "arrow.down.right.and.arrow.up.left")
-                                    .font(.system(size: 8))
-                                    .foregroundColor(.yellow)
-                            }
-                            Text(window.title)
-                                .font(.caption)
-                                .lineLimit(1)
-                                .foregroundColor(window.isMinimized ? .yellow : .white)
-                        }
-                        .frame(width: 160)
                     }
-                    .padding(8)
-                    .background(Color.black.opacity(window.isMinimized ? 0.7 : 0.6))
-                    .cornerRadius(12)
-                    .onTapGesture {
-                        onSelect(window)
-                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
                 }
             }
         }
-        .padding(12)
+        .frame(maxWidth: maxWidth)
         .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
         .cornerRadius(16)
         .shadow(radius: 10)
@@ -196,33 +229,46 @@ class OverlayWindowManager: ObservableObject {
             panel?.hasShadow = true
         }
         
-        let contentView = PreviewOverlay(windows: windows) { window in
+        // Position above the dock icon - RESPONSIVE (don't go off screen)
+        guard let screen = NSScreen.main else { return }
+        
+        let screenFrame = screen.visibleFrame
+        let screenHeight = screen.frame.height
+        
+        // Calculate max width for the overlay (screen width minus margins)
+        let maxPanelWidth = screenFrame.width - 32 // 16px margin on each side
+        
+        let contentView = PreviewOverlay(windows: windows, onSelect: { window in
             WindowFetcher.activateWindow(window: window)
-            // Optional: hide overlay immediately
-            // self.panel?.orderOut(nil)
-        }
+        }, maxWidth: maxPanelWidth)
         
         let hostingView = NSHostingView(rootView: contentView)
         panel?.contentView = hostingView
         
-        // Size the panel to fit content
-        let fittingSize = hostingView.fittingSize
+        // Size the panel to fit content (but respect max width)
+        var fittingSize = hostingView.fittingSize
+        if fittingSize.width > maxPanelWidth {
+            fittingSize.width = maxPanelWidth
+        }
         panel?.setContentSize(fittingSize)
         
-        // Position above the dock icon
-        if let screen = NSScreen.main {
-            let screenHeight = screen.frame.height
-            // icon.frame.origin.y is distance from top (AX/Quartz).
-            // Cocoa y = screenHeight - (iconY + iconHeight)
-            let iconCocoaY = screenHeight - (icon.frame.origin.y + icon.frame.height)
-            let iconCocoaX = icon.frame.origin.x
-            
-            let panelX = iconCocoaX + (icon.frame.width / 2) - (fittingSize.width / 2)
-            let panelY = iconCocoaY + icon.frame.height + 10 // 10px padding above icon
-            
-            print("Positioning panel at: \(panelX), \(panelY)")
-            panel?.setFrameOrigin(NSPoint(x: panelX, y: panelY))
-        }
+        // icon.frame.origin.y is distance from top (AX/Quartz).
+        // Cocoa y = screenHeight - (iconY + iconHeight)
+        let iconCocoaY = screenHeight - (icon.frame.origin.y + icon.frame.height)
+        let iconCocoaX = icon.frame.origin.x
+        
+        // Calculate ideal position (centered above icon)
+        var panelX = iconCocoaX + (icon.frame.width / 2) - (fittingSize.width / 2)
+        let panelY = iconCocoaY + icon.frame.height + 10 // 10px padding above icon
+        
+        // Clamp X to stay within screen bounds
+        let minX = screenFrame.origin.x + 8
+        let maxX = screenFrame.origin.x + screenFrame.width - fittingSize.width - 8
+        
+        panelX = max(minX, min(panelX, maxX))
+        
+        print("Positioning panel at: \(panelX), \(panelY) (panel width: \(fittingSize.width))")
+        panel?.setFrameOrigin(NSPoint(x: panelX, y: panelY))
         
         panel?.orderFront(nil)
     }
