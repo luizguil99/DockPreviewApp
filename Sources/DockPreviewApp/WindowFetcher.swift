@@ -266,4 +266,82 @@ class WindowFetcher {
             app?.activate(options: [.activateIgnoringOtherApps])
         }
     }
+    
+    static func closeWindow(window: AppWindow) {
+        print("Closing window: \(window.title)")
+        
+        guard let axElement = window.axElement else {
+            print("Warning: No AXUIElement stored, cannot close window")
+            return
+        }
+        
+        // Get the close button and press it
+        var closeButton: AnyObject?
+        let result = AXUIElementCopyAttributeValue(axElement, kAXCloseButtonAttribute as CFString, &closeButton)
+        
+        if result == .success, let button = closeButton {
+            let pressResult = AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString)
+            print("Close result: \(pressResult == .success ? "success" : "failed")")
+        } else {
+            print("Could not find close button")
+        }
+    }
+    
+    static func minimizeWindow(window: AppWindow) {
+        print("Minimizing window: \(window.title)")
+        
+        guard let axElement = window.axElement else {
+            print("Warning: No AXUIElement stored, cannot minimize window")
+            return
+        }
+        
+        // Toggle minimize state
+        let newMinimizedState = !window.isMinimized
+        let result = AXUIElementSetAttributeValue(axElement, kAXMinimizedAttribute as CFString, newMinimizedState as CFTypeRef)
+        print("Minimize result: \(result == .success ? "success" : "failed")")
+    }
+    
+    static func toggleFullscreen(window: AppWindow) {
+        print("Maximizing window (zoom): \(window.title)")
+        
+        guard let axElement = window.axElement else {
+            print("Warning: No AXUIElement stored, cannot maximize window")
+            return
+        }
+        
+        // First, activate the window
+        let app = NSRunningApplication(processIdentifier: window.ownerPID)
+        app?.activate(options: [.activateIgnoringOtherApps])
+        AXUIElementPerformAction(axElement, kAXRaiseAction as CFString)
+        
+        // Get the visible frame (screen minus dock and menu bar)
+        guard let screen = NSScreen.main else {
+            print("Could not get main screen")
+            return
+        }
+        
+        let visibleFrame = screen.visibleFrame
+        let screenHeight = screen.frame.height
+        
+        // Convert position to AX coordinates (top-left origin)
+        // visibleFrame.origin is in Cocoa coordinates (bottom-left origin)
+        // AX uses top-left origin
+        let axY = screenHeight - visibleFrame.origin.y - visibleFrame.height
+        
+        // Set position (top-left corner of visible area)
+        var position = CGPoint(x: visibleFrame.origin.x, y: axY)
+        if let positionValue = AXValueCreate(.cgPoint, &position) {
+            let posResult = AXUIElementSetAttributeValue(axElement, kAXPositionAttribute as CFString, positionValue)
+            print("Position set result: \(posResult == .success ? "success" : "failed")")
+        }
+        
+        // Set size to fill visible area
+        var size = CGSize(width: visibleFrame.width, height: visibleFrame.height)
+        if let sizeValue = AXValueCreate(.cgSize, &size) {
+            let sizeResult = AXUIElementSetAttributeValue(axElement, kAXSizeAttribute as CFString, sizeValue)
+            print("Size set result: \(sizeResult == .success ? "success" : "failed")")
+        }
+        
+        print("Maximized to: \(visibleFrame)")
+    }
 }

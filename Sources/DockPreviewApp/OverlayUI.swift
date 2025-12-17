@@ -2,14 +2,45 @@ import SwiftUI
 import AppKit
 import Combine
 
+struct WindowControlButton: View {
+    let color: Color
+    let systemName: String
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 14, height: 14)
+                
+                if isHovered {
+                    Image(systemName: systemName)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.black.opacity(0.8))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
 struct WindowPreviewCard: View {
     let window: AppWindow
     let onSelect: () -> Void
+    let onClose: () -> Void
+    let onMinimize: () -> Void
+    let onFullscreen: () -> Void
     @State private var isHovered = false
     
     var body: some View {
         VStack(spacing: 6) {
-            ZStack(alignment: .topTrailing) {
+            ZStack {
+                // Window preview image
                 if let nsImage = window.image {
                     Image(nsImage: nsImage)
                         .resizable()
@@ -34,13 +65,41 @@ struct WindowPreviewCard: View {
                         )
                 }
                 
-                // Minimized badge
+                // Traffic light buttons (top-left) - only show on hover
+                if isHovered {
+                    VStack {
+                        HStack(spacing: 4) {
+                            WindowControlButton(color: .red, systemName: "xmark") {
+                                onClose()
+                            }
+                            WindowControlButton(color: .yellow, systemName: "minus") {
+                                onMinimize()
+                            }
+                            WindowControlButton(color: .green, systemName: "arrow.up.left.and.arrow.down.right") {
+                                onFullscreen()
+                            }
+                            Spacer()
+                        }
+                        .padding(6)
+                        Spacer()
+                    }
+                    .frame(width: 160, height: 100)
+                }
+                
+                // Minimized badge (top-right)
                 if window.isMinimized {
-                    Image(systemName: "minus.circle.fill")
-                        .foregroundColor(.yellow)
-                        .background(Circle().fill(Color.black.opacity(0.6)))
-                        .font(.system(size: 18))
-                        .offset(x: 4, y: -4)
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.yellow)
+                                .background(Circle().fill(Color.black.opacity(0.6)))
+                                .font(.system(size: 16))
+                                .padding(4)
+                        }
+                        Spacer()
+                    }
+                    .frame(width: 160, height: 100)
                 }
             }
             
@@ -62,7 +121,7 @@ struct WindowPreviewCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(isHovered ? Color.blue.opacity(0.3) : Color.black.opacity(window.isMinimized ? 0.7 : 0.5))
         )
-        .scaleEffect(isHovered ? 1.05 : 1.0)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
@@ -76,6 +135,9 @@ struct WindowPreviewCard: View {
 struct PreviewOverlay: View {
     let windows: [AppWindow]
     let onSelect: (AppWindow) -> Void
+    let onClose: (AppWindow) -> Void
+    let onMinimize: (AppWindow) -> Void
+    let onFullscreen: (AppWindow) -> Void
     let maxWidth: CGFloat
     
     var body: some View {
@@ -88,9 +150,13 @@ struct PreviewOverlay: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(windows, id: \.id) { window in
-                            WindowPreviewCard(window: window) {
-                                onSelect(window)
-                            }
+                            WindowPreviewCard(
+                                window: window,
+                                onSelect: { onSelect(window) },
+                                onClose: { onClose(window) },
+                                onMinimize: { onMinimize(window) },
+                                onFullscreen: { onFullscreen(window) }
+                            )
                         }
                     }
                     .padding(.horizontal, 12)
@@ -238,9 +304,24 @@ class OverlayWindowManager: ObservableObject {
         // Calculate max width for the overlay (screen width minus margins)
         let maxPanelWidth = screenFrame.width - 32 // 16px margin on each side
         
-        let contentView = PreviewOverlay(windows: windows, onSelect: { window in
-            WindowFetcher.activateWindow(window: window)
-        }, maxWidth: maxPanelWidth)
+        let contentView = PreviewOverlay(
+            windows: windows,
+            onSelect: { window in
+                WindowFetcher.activateWindow(window: window)
+            },
+            onClose: { [weak self] window in
+                WindowFetcher.closeWindow(window: window)
+                self?.updateOverlay()
+            },
+            onMinimize: { [weak self] window in
+                WindowFetcher.minimizeWindow(window: window)
+                self?.updateOverlay()
+            },
+            onFullscreen: { window in
+                WindowFetcher.toggleFullscreen(window: window)
+            },
+            maxWidth: maxPanelWidth
+        )
         
         let hostingView = NSHostingView(rootView: contentView)
         panel?.contentView = hostingView
