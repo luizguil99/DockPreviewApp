@@ -14,9 +14,24 @@ class DockMonitor: ObservableObject {
     private var icons: [DockIcon] = []
     private var timer: Timer?
     private let dockBundleID = "com.apple.dock"
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var lastActiveAppBundleID: String?
+    private var pendingHideAppBundleID: String?
 
     init() {
         startMonitoring()
+        setupEventTap()
+        setupActiveAppTracking()
+    }
+    
+    deinit {
+        if let eventTap = eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+        }
+        if let runLoopSource = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        }
     }
 
     func startMonitoring() {
@@ -29,6 +44,86 @@ class DockMonitor: ObservableObject {
             self?.checkMousePosition()
         }
         updateIcons()
+    }
+    
+    private func setupActiveAppTracking() {
+        // Track which app is active BEFORE clicking on dock
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
+                if app.bundleIdentifier != "com.apple.dock" {
+                    self?.lastActiveAppBundleID = app.bundleIdentifier
+                }
+            }
+        }
+        lastActiveAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    }
+    
+    private func setupEventTap() {
+        // Create an event tap to intercept clicks BEFORE they reach the Dock
+        let eventMask = (1 << CGEventType.leftMouseDown.rawValue)
+        
+        // Use a C function pointer wrapper
+        let callback: CGEventTapCallBack = { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
+            guard let refcon = refcon else { return Unmanaged.passRetained(event) }
+            let monitor = Unmanaged<DockMonitor>.fromOpaque(refcon).takeUnretainedValue()
+            return monitor.handleEventTap(proxy: proxy, type: type, event: event)
+        }
+        
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(eventMask),
+            callback: callback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            print("Failed to create event tap - need Accessibility permissions")
+            return
+        }
+        
+        eventTap = tap
+        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        print("Event tap setup complete")
+    }
+    
+    private func handleEventTap(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        // Get mouse location from the event
+        let mouseLoc = event.location
+        guard let screenHeight = NSScreen.main?.frame.height else {
+            return Unmanaged.passRetained(event)
+        }
+        
+        // CGEvent location is already in top-left coordinates (Quartz)
+        let mousePointTopLeft = mouseLoc
+        
+        // Check if click is on a dock icon
+        guard let clickedIcon = icons.first(where: { $0.frame.contains(mousePointTopLeft) }) else {
+            return Unmanaged.passRetained(event) // Not on dock, pass through
+        }
+        
+        // Find the running app
+        let runningApps = NSWorkspace.shared.runningApplications
+        guard let app = runningApps.first(where: { $0.localizedName == clickedIcon.title }) else {
+            return Unmanaged.passRetained(event) // App not running, let Dock handle it
+        }
+        
+        // If the clicked app was already the active app, toggle hide
+        if app.bundleIdentifier == lastActiveAppBundleID && !app.isHidden {
+            print("Intercepting click - hiding: \(clickedIcon.title)")
+            app.hide()
+            return nil // Block the click from reaching Dock
+        } else if app.isHidden {
+            print("App is hidden, letting Dock unhide: \(clickedIcon.title)")
+            return Unmanaged.passRetained(event) // Let Dock handle unhide
+        }
+        
+        return Unmanaged.passRetained(event) // Pass through for other cases
     }
 
     private func getDockAXUIElement() -> AXUIElement? {
