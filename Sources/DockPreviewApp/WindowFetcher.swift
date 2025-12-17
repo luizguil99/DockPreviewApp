@@ -43,7 +43,7 @@ class WindowFetcher {
         }
         
         // Also get CGWindowList for capturing images of visible windows
-        let cgWindowsMap = getCGWindowsMap(for: pid)
+        var cgWindowsMap = getCGWindowsMap(for: pid)
         
         var windows: [AppWindow] = []
         var windowIndex = 0
@@ -88,13 +88,13 @@ class WindowFetcher {
             let windowID = CGWindowID(pid) * 1000 + CGWindowID(windowIndex)
             windowIndex += 1
             
-            // Get image
+            // Get image - pass mutable cgWindowsMap to remove used windows
             var image: NSImage?
             if isMinimized {
                 image = getMinimizedWindowImage(app: app, axWindow: axWindow)
             } else {
                 // Try to find matching CG window for image capture
-                image = findAndCaptureImage(bounds: bounds, title: title, cgWindows: cgWindowsMap)
+                image = findAndCaptureImage(bounds: bounds, title: title, cgWindows: &cgWindowsMap)
             }
             
             let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
@@ -138,18 +138,46 @@ class WindowFetcher {
         return result
     }
     
-    private static func findAndCaptureImage(bounds: CGRect, title: String, cgWindows: [(id: CGWindowID, bounds: CGRect, title: String)]) -> NSImage? {
-        // Find matching CG window by position (most reliable) or title
-        for cg in cgWindows {
-            // Match by approximate position (within 10 pixels)
-            let posMatch = abs(cg.bounds.origin.x - bounds.origin.x) < 10 &&
-                           abs(cg.bounds.origin.y - bounds.origin.y) < 10
-            let titleMatch = !title.isEmpty && cg.title == title
+    private static func findAndCaptureImage(bounds: CGRect, title: String, cgWindows: inout [(id: CGWindowID, bounds: CGRect, title: String)]) -> NSImage? {
+        // Find matching CG window - prioritize title match, then position match
+        var bestMatchIndex: Int? = nil
+        var bestMatchScore = 0
+        
+        for (index, cg) in cgWindows.enumerated() {
+            var score = 0
             
-            if posMatch || titleMatch {
-                return captureWindowImage(windowID: cg.id, bounds: cg.bounds)
+            // Title match is highest priority
+            if !title.isEmpty && !cg.title.isEmpty && cg.title == title {
+                score += 100
+            }
+            
+            // Position match (within tolerance)
+            let posMatch = abs(cg.bounds.origin.x - bounds.origin.x) < 50 &&
+                           abs(cg.bounds.origin.y - bounds.origin.y) < 50
+            if posMatch {
+                score += 50
+            }
+            
+            // Size match
+            let sizeMatch = abs(cg.bounds.width - bounds.width) < 50 &&
+                            abs(cg.bounds.height - bounds.height) < 50
+            if sizeMatch {
+                score += 25
+            }
+            
+            if score > bestMatchScore {
+                bestMatchScore = score
+                bestMatchIndex = index
             }
         }
+        
+        // If we found a match, capture and remove from list to prevent reuse
+        if let index = bestMatchIndex, bestMatchScore > 0 {
+            let cg = cgWindows[index]
+            cgWindows.remove(at: index) // Remove so it won't be matched again
+            return captureWindowImage(windowID: cg.id, bounds: cg.bounds)
+        }
+        
         return nil
     }
     
