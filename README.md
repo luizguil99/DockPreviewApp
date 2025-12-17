@@ -24,6 +24,11 @@ Um aplicativo macOS que exibe visualizações de janelas abertas ao passar o mou
 
 - **Permissões**: Na primeira execução, o macOS deve solicitar permissões de Acessibilidade e Gravação de Tela. Se não solicitar, vá em `Ajustes do Sistema` -> `Privacidade e Segurança` -> `Acessibilidade` e adicione o seu Terminal (ou o aplicativo compilado se movido para um bundle). O mesmo para `Gravação de Tela`.
 - **Tela Preta/Vazia**: Se as visualizações aparecerem pretas ou vazias, verifique a permissão de Gravação de Tela.
+Para iniciar automaticamente com o Mac:
+Vá em Ajustes do Sistema → Geral → Itens de Início
+Clique em + e adicione DockPreviewApp
+
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 
 
 cd DockPreviewApp
