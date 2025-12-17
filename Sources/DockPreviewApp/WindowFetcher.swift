@@ -344,4 +344,26 @@ class WindowFetcher {
         
         print("Maximized to: \(visibleFrame)")
     }
+    
+    static func killProcess(window: AppWindow) {
+        print("Killing process for window: \(window.title)")
+        
+        let pid = window.ownerPID
+        
+        // Use kill signal to terminate the process
+        let result = kill(pid, SIGTERM)
+        
+        if result == 0 {
+            print("Process \(pid) terminated successfully")
+        } else {
+            // If SIGTERM fails, try SIGKILL (force)
+            print("SIGTERM failed, trying SIGKILL")
+            let forceResult = kill(pid, SIGKILL)
+            if forceResult == 0 {
+                print("Process \(pid) force killed successfully")
+            } else {
+                print("Failed to kill process \(pid)")
+            }
+        }
+    }
 }

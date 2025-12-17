@@ -35,6 +35,7 @@ struct WindowPreviewCard: View {
     let onClose: () -> Void
     let onMinimize: () -> Void
     let onFullscreen: () -> Void
+    let onKill: () -> Void
     @State private var isHovered = false
     
     var body: some View {
@@ -78,7 +79,13 @@ struct WindowPreviewCard: View {
                             WindowControlButton(color: .green, systemName: "arrow.up.left.and.arrow.down.right") {
                                 onFullscreen()
                             }
+                            
                             Spacer()
+                            
+                            // Kill process button (right side)
+                            WindowControlButton(color: Color(red: 0.6, green: 0.1, blue: 0.1), systemName: "power") {
+                                onKill()
+                            }
                         }
                         .padding(6)
                         Spacer()
@@ -138,6 +145,7 @@ struct PreviewOverlay: View {
     let onClose: (AppWindow) -> Void
     let onMinimize: (AppWindow) -> Void
     let onFullscreen: (AppWindow) -> Void
+    let onKill: (AppWindow) -> Void
     let maxWidth: CGFloat
     
     var body: some View {
@@ -155,7 +163,8 @@ struct PreviewOverlay: View {
                                 onSelect: { onSelect(window) },
                                 onClose: { onClose(window) },
                                 onMinimize: { onMinimize(window) },
-                                onFullscreen: { onFullscreen(window) }
+                                onFullscreen: { onFullscreen(window) },
+                                onKill: { onKill(window) }
                             )
                         }
                     }
@@ -319,6 +328,10 @@ class OverlayWindowManager: ObservableObject {
             },
             onFullscreen: { window in
                 WindowFetcher.toggleFullscreen(window: window)
+            },
+            onKill: { [weak self] window in
+                WindowFetcher.killProcess(window: window)
+                self?.updateOverlay()
             },
             maxWidth: maxPanelWidth
         )
