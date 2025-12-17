@@ -89,13 +89,12 @@ struct VisualEffectView: NSViewRepresentable {
 
 class OverlayWindowManager: ObservableObject {
     private var panel: NSPanel?
-    private var dockMonitor = DockMonitor()
     private var cancellables = Set<AnyCancellable>()
     private var checkTimer: Timer?
     
     init() {
-        // Setup subscribers
-        dockMonitor.$hoveredIcon
+        // Setup subscribers - use shared DockMonitor
+        DockMonitor.shared.$hoveredIcon
             .receive(on: DispatchQueue.main)
             .sink { [weak self] icon in
                 self?.handleIconChange(icon)

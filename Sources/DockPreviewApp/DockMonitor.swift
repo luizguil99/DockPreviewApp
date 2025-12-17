@@ -10,19 +10,37 @@ struct DockIcon {
 }
 
 class DockMonitor: ObservableObject {
+    static let shared = DockMonitor()
+    
     @Published var hoveredIcon: DockIcon?
+    @Published var clickToHideEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(clickToHideEnabled, forKey: "clickToHideEnabled")
+            updateEventTapState()
+        }
+    }
+    
     private var icons: [DockIcon] = []
     private var timer: Timer?
     private let dockBundleID = "com.apple.dock"
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var lastActiveAppBundleID: String?
-    private var pendingHideAppBundleID: String?
 
     init() {
+        // Load saved preference
+        clickToHideEnabled = UserDefaults.standard.object(forKey: "clickToHideEnabled") as? Bool ?? true
+        
         startMonitoring()
         setupEventTap()
         setupActiveAppTracking()
+    }
+    
+    private func updateEventTapState() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: clickToHideEnabled)
+            print("Click-to-hide: \(clickToHideEnabled ? "enabled" : "disabled")")
+        }
     }
     
     deinit {
