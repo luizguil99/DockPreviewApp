@@ -121,7 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        // Click to Hide toggle with slider
+        // Click to Hide toggle
         let toggleView = MenuToggleView(
             title: "Click to Hide",
             isOn: Binding(
@@ -135,6 +135,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let toggleItem = NSMenuItem()
         toggleItem.view = hostingView
         menu.addItem(toggleItem)
+        
+        // Chrome Profiles toggle
+        let chromeToggleView = MenuToggleView(
+            title: "Chrome Profiles",
+            isOn: Binding(
+                get: { DockMonitor.shared.chromeProfilesEnabled },
+                set: { DockMonitor.shared.chromeProfilesEnabled = $0 }
+            )
+        )
+        let chromeHostingView = NSHostingView(rootView: chromeToggleView)
+        chromeHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
+        
+        let chromeToggleItem = NSMenuItem()
+        chromeToggleItem.view = chromeHostingView
+        menu.addItem(chromeToggleItem)
         
         menu.addItem(NSMenuItem.separator())
         

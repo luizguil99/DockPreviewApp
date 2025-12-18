@@ -20,6 +20,11 @@ class DockMonitor: ObservableObject {
             updateEventTapState()
         }
     }
+    @Published var chromeProfilesEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(chromeProfilesEnabled, forKey: "chromeProfilesEnabled")
+        }
+    }
     
     private var icons: [DockIcon] = []
     private var timer: Timer?
@@ -29,8 +34,9 @@ class DockMonitor: ObservableObject {
     private var lastActiveAppBundleID: String?
 
     init() {
-        // Load saved preference
+        // Load saved preferences
         clickToHideEnabled = UserDefaults.standard.object(forKey: "clickToHideEnabled") as? Bool ?? true
+        chromeProfilesEnabled = UserDefaults.standard.object(forKey: "chromeProfilesEnabled") as? Bool ?? true
         
         startMonitoring()
         setupEventTap()
