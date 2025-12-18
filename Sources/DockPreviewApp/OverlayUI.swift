@@ -2,6 +2,11 @@ import SwiftUI
 import AppKit
 import Combine
 
+// Observable model to hold windows data without recreating views
+class WindowsModel: ObservableObject {
+    @Published var windows: [AppWindow] = []
+}
+
 struct WindowControlButton: View {
     let color: Color
     let systemName: String
@@ -140,7 +145,7 @@ struct WindowPreviewCard: View {
 }
 
 struct PreviewOverlay: View {
-    let windows: [AppWindow]
+    @ObservedObject var windowsModel: WindowsModel
     let onSelect: (AppWindow) -> Void
     let onClose: (AppWindow) -> Void
     let onMinimize: (AppWindow) -> Void
@@ -150,14 +155,14 @@ struct PreviewOverlay: View {
     
     var body: some View {
         Group {
-            if windows.isEmpty {
+            if windowsModel.windows.isEmpty {
                 Text("No open windows")
                     .foregroundColor(.white)
                     .padding()
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        ForEach(windows, id: \.id) { window in
+                        ForEach(windowsModel.windows, id: \.id) { window in
                             WindowPreviewCard(
                                 window: window,
                                 onSelect: { onSelect(window) },
@@ -197,6 +202,8 @@ struct VisualEffectView: NSViewRepresentable {
 
 class OverlayWindowManager: ObservableObject {
     private var panel: NSPanel?
+    private var hostingView: NSHostingView<PreviewOverlay>?
+    private var windowsModel = WindowsModel()
     private var cancellables = Set<AnyCancellable>()
     private var checkTimer: Timer?
     private var isRefreshing = false // Flag to prevent closing during refresh
@@ -313,6 +320,8 @@ class OverlayWindowManager: ObservableObject {
             print("Cleaning up panel (no icon)")
             panel?.orderOut(nil)
             panel = nil
+            hostingView = nil
+            windowsModel.windows = []
             return
         }
         
@@ -324,12 +333,22 @@ class OverlayWindowManager: ObservableObject {
         if windows.isEmpty {
              print("No windows found for \(icon.title)")
              panel?.orderOut(nil)
-             // panel = nil // Keep panel? No, hide it.
              return
         }
 
-        // Create Panel if needed
-        if panel == nil {
+        // Position above the dock icon - RESPONSIVE (don't go off screen)
+        guard let screen = NSScreen.main else { return }
+        
+        let screenFrame = screen.visibleFrame
+        let screenHeight = screen.frame.height
+        
+        // Calculate max width for the overlay (screen width minus margins)
+        let maxPanelWidth = screenFrame.width - 32 // 16px margin on each side
+
+        // Create Panel and HostingView if needed (only once per icon session)
+        let needsNewPanel = panel == nil || hostingView == nil
+        
+        if needsNewPanel {
             print("Creating new panel")
             panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
@@ -341,64 +360,60 @@ class OverlayWindowManager: ObservableObject {
             panel?.backgroundColor = .clear
             panel?.isOpaque = false
             panel?.hasShadow = true
+            
+            // Create hosting view with observable model (only once)
+            let contentView = PreviewOverlay(
+                windowsModel: windowsModel,
+                onSelect: { [weak self] window in
+                    self?.isRefreshing = true
+                    WindowFetcher.activateWindow(window: window)
+                    // Refresh overlay after a short delay to capture updated window image
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        self?.updateOverlay()
+                        self?.isRefreshing = false
+                    }
+                },
+                onClose: { [weak self] window in
+                    WindowFetcher.closeWindow(window: window)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        self?.updateOverlay()
+                    }
+                },
+                onMinimize: { [weak self] window in
+                    self?.isRefreshing = true
+                    WindowFetcher.minimizeWindow(window: window)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self?.updateOverlay()
+                        self?.isRefreshing = false
+                    }
+                },
+                onFullscreen: { [weak self] window in
+                    self?.isRefreshing = true
+                    WindowFetcher.toggleFullscreen(window: window)
+                    // Refresh after fullscreen to capture new size
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self?.updateOverlay()
+                        self?.isRefreshing = false
+                    }
+                },
+                onKill: { [weak self] window in
+                    WindowFetcher.killProcess(window: window)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self?.updateOverlay()
+                    }
+                },
+                maxWidth: maxPanelWidth
+            )
+            
+            hostingView = NSHostingView(rootView: contentView)
+            panel?.contentView = hostingView
         }
         
-        // Position above the dock icon - RESPONSIVE (don't go off screen)
-        guard let screen = NSScreen.main else { return }
-        
-        let screenFrame = screen.visibleFrame
-        let screenHeight = screen.frame.height
-        
-        // Calculate max width for the overlay (screen width minus margins)
-        let maxPanelWidth = screenFrame.width - 32 // 16px margin on each side
-        
-        let contentView = PreviewOverlay(
-            windows: windows,
-            onSelect: { [weak self] window in
-                self?.isRefreshing = true
-                WindowFetcher.activateWindow(window: window)
-                // Refresh overlay after a short delay to capture updated window image
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    self?.updateOverlay()
-                    self?.isRefreshing = false
-                }
-            },
-            onClose: { [weak self] window in
-                WindowFetcher.closeWindow(window: window)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    self?.updateOverlay()
-                }
-            },
-            onMinimize: { [weak self] window in
-                self?.isRefreshing = true
-                WindowFetcher.minimizeWindow(window: window)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self?.updateOverlay()
-                    self?.isRefreshing = false
-                }
-            },
-            onFullscreen: { [weak self] window in
-                self?.isRefreshing = true
-                WindowFetcher.toggleFullscreen(window: window)
-                // Refresh after fullscreen to capture new size
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self?.updateOverlay()
-                    self?.isRefreshing = false
-                }
-            },
-            onKill: { [weak self] window in
-                WindowFetcher.killProcess(window: window)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self?.updateOverlay()
-                }
-            },
-            maxWidth: maxPanelWidth
-        )
-        
-        let hostingView = NSHostingView(rootView: contentView)
-        panel?.contentView = hostingView
+        // Update the windows model (this preserves hover states in existing views)
+        windowsModel.windows = windows
         
         // Size the panel to fit content (but respect max width)
+        guard let hostingView = hostingView else { return }
         var fittingSize = hostingView.fittingSize
         if fittingSize.width > maxPanelWidth {
             fittingSize.width = maxPanelWidth
