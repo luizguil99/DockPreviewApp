@@ -139,9 +139,20 @@ class CursorController {
         
         let hostingController = NSHostingController(rootView: contentView)
         
+        // Get screen dimensions
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame
+        
+        let windowWidth: CGFloat = 500
+        let windowHeight: CGFloat = 140
+        
+        // Calculate center position
+        let x = screenFrame.midX - (windowWidth / 2)
+        let y = screenFrame.midY - (windowHeight / 2)
+        
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 140),
-            styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
+            contentRect: NSRect(x: x, y: y, width: windowWidth, height: windowHeight),
+            styleMask: [.titled, .fullSizeContentView, .closable],
             backing: .buffered,
             defer: false
         )
@@ -154,11 +165,18 @@ class CursorController {
         window.isOpaque = false
         window.hasShadow = true
         window.contentViewController = hostingController
-        window.center()
+        
+        // Hide traffic lights (red, yellow, green buttons)
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         
         // Activate app to allow typing
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        
+        // Make sure the window can become key to receive keyboard input
+        window.makeFirstResponder(window.contentView)
         
         chatWindow = window
     }
