@@ -1,27 +1,6 @@
 import Cocoa
 import SwiftUI
 
-// Custom view for toggle switch in menu
-struct MenuToggleView: View {
-    let title: String
-    @Binding var isOn: Bool
-    
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 13))
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .scaleEffect(0.8)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .frame(width: 200)
-    }
-}
-
 class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayManager: OverlayWindowManager?
     var statusItem: NSStatusItem?
@@ -66,6 +45,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         let menu = NSMenu()
         
+        // Folder browser (from MenuComponents.swift)
+        let folderBrowserView = MenuFolderBrowserView()
+        let folderHostingView = NSHostingView(rootView: folderBrowserView)
+        folderHostingView.frame = NSRect(x: 0, y: 0, width: 280, height: 350)
+        
+        let folderItem = NSMenuItem()
+        folderItem.view = folderHostingView
+        menu.addItem(folderItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         // Click to Hide toggle with slider
         let toggleView = MenuToggleView(
             title: "Click to Hide",
@@ -75,7 +65,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
         let hostingView = NSHostingView(rootView: toggleView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 28)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 280, height: 28)
         
         let toggleItem = NSMenuItem()
         toggleItem.view = hostingView
@@ -139,4 +129,3 @@ let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()
-
