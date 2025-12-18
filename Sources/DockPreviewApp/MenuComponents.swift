@@ -6,20 +6,20 @@ import AppKit
 struct MenuToggleView: View {
     let title: String
     @Binding var isOn: Bool
-    
+
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
             Spacer()
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .scaleEffect(0.8)
+                .scaleEffect(0.85)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .frame(width: 280)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .frame(width: 320)
     }
 }
 
@@ -359,7 +359,7 @@ struct MenuFolderBrowserView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Navigation header
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 // Back button (only show when not at root)
                 if !manager.isAtRootFolder {
                     Button(action: { 
@@ -367,11 +367,11 @@ struct MenuFolderBrowserView: View {
                         loadFolderContents()
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(isHoveringBack ? .primary : .secondary)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 28, height: 28)
                             .background(isHoveringBack ? Color.primary.opacity(0.1) : Color.clear)
-                            .cornerRadius(4)
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
                     .onHover { hovering in
@@ -384,12 +384,12 @@ struct MenuFolderBrowserView: View {
                         manager.navigateToRoot()
                         loadFolderContents()
                     }) {
-                        Image(systemName: "house")
-                            .font(.system(size: 11))
+                        Image(systemName: "house.fill")
+                            .font(.system(size: 13))
                             .foregroundColor(isHoveringHome ? .primary : .secondary)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 28, height: 28)
                             .background(isHoveringHome ? Color.primary.opacity(0.1) : Color.clear)
-                            .cornerRadius(4)
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
                     .onHover { hovering in
@@ -400,24 +400,24 @@ struct MenuFolderBrowserView: View {
                 
                 // Folder name button
                 Button(action: { manager.selectFolder() }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "folder.fill")
                             .foregroundColor(.blue)
-                            .font(.system(size: 13))
+                            .font(.system(size: 16))
                         
                         Text(currentFolderName)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 14, weight: .semibold))
                             .lineLimit(1)
                             .truncationMode(.middle)
                         
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 9))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
                     .background(isHoveringHeader ? Color.primary.opacity(0.1) : Color.clear)
-                    .cornerRadius(4)
+                    .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
                 .onHover { hovering in
@@ -437,11 +437,11 @@ struct MenuFolderBrowserView: View {
                         }
                     }) {
                         Image(systemName: "folder.badge.plus")
-                            .font(.system(size: 13))
+                            .font(.system(size: 16))
                             .foregroundColor(isHoveringNewFolder ? .blue : .secondary)
-                            .frame(width: 28, height: 24)
+                            .frame(width: 32, height: 28)
                             .background(isHoveringNewFolder ? Color.blue.opacity(0.1) : Color.clear)
-                            .cornerRadius(4)
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
                     .onHover { hovering in
@@ -450,57 +450,57 @@ struct MenuFolderBrowserView: View {
                     .help("Create new folder")
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             
             // App buttons row (dynamic from CustomAppManager)
             if manager.selectedFolder != nil, let currentPath = manager.currentBrowsePath {
                 ScrollView(.horizontal, showsIndicators: false) {
                     DynamicAppButtonsRow(path: currentPath)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 14)
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 8)
             }
             
             Divider()
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 10)
             
             // Search field
             if manager.selectedFolder != nil {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                     
                     TextField("Search files...", text: $searchText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                     
                     if !searchText.isEmpty {
                         Button(action: { searchText = "" }) {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(.secondary)
-                                .font(.system(size: 12))
+                                .font(.system(size: 14))
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.primary.opacity(0.05))
+                .cornerRadius(8)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.05))
-                .cornerRadius(6)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
             }
             
             // Folder contents
             if manager.selectedFolder != nil {
                 if filteredItems.isEmpty {
                     Text(searchText.isEmpty ? "Empty folder" : "No results for \"\(searchText)\"")
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .foregroundColor(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 16)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 24)
                         .frame(maxWidth: .infinity)
                 } else {
                     ScrollView {
@@ -513,20 +513,20 @@ struct MenuFolderBrowserView: View {
                                 })
                             }
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
                     }
-                    .frame(maxHeight: 250)
+                    .frame(maxHeight: 300)
                 }
             } else {
                 Text("Click to select a folder")
-                    .font(.system(size: 12))
+                    .font(.system(size: 14))
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 24)
                     .frame(maxWidth: .infinity)
             }
         }
-        .frame(width: 280)
+        .frame(width: 320)
         .onAppear {
             if manager.currentBrowsePath == nil {
                 manager.currentBrowsePath = manager.selectedFolder
@@ -603,7 +603,7 @@ struct FolderItemRow: View {
     var onFolderTap: ((String) -> Void)?
     @State private var isHovered = false
     @State private var isHoveringOpen = false
-    
+
     var body: some View {
         HStack(spacing: 0) {
             Button(action: {
@@ -615,39 +615,39 @@ struct FolderItemRow: View {
                     NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
                 }
             }) {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     Image(systemName: item.icon)
                         .foregroundColor(item.iconColor)
-                        .font(.system(size: 14))
-                        .frame(width: 18)
-                    
+                        .font(.system(size: 18))
+                        .frame(width: 24)
+
                     Text(item.name)
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    
+
                     Spacer()
-                    
+
                     // Show chevron for folders to indicate navigation
                     if item.isDirectory && !isHovered {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundColor(.secondary.opacity(0.5))
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
             }
             .buttonStyle(.plain)
-            
+
             // Show app buttons for folders on hover (dynamic from CustomAppManager)
             if item.isDirectory && isHovered {
                 DynamicMiniAppButtons(path: item.path, includeFinder: true)
-                    .padding(.trailing, 8)
+                    .padding(.trailing, 12)
             }
         }
-        .background(isHovered ? Color.primary.opacity(0.1) : Color.clear)
-        .cornerRadius(4)
+        .background(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+        .cornerRadius(6)
         .onHover { hovering in
             isHovered = hovering
         }
@@ -661,13 +661,15 @@ struct MiniAppButton: View {
     let color: Color
     let action: () -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 9))
+                .font(.system(size: 14))
                 .foregroundColor(isHovered ? color : .secondary)
-                .frame(width: 16, height: 16)
+                .frame(width: 24, height: 24)
+                .background(isHovered ? color.opacity(0.1) : Color.clear)
+                .cornerRadius(4)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

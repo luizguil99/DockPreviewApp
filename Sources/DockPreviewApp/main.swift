@@ -48,7 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Folder browser (from MenuComponents.swift)
         let folderBrowserView = MenuFolderBrowserView()
         let folderHostingView = NSHostingView(rootView: folderBrowserView)
-        folderHostingView.frame = NSRect(x: 0, y: 0, width: 280, height: 350)
+        folderHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 450)
         
         let folderItem = NSMenuItem()
         folderItem.view = folderHostingView
@@ -65,7 +65,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
         let hostingView = NSHostingView(rootView: toggleView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 280, height: 28)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
         
         let toggleItem = NSMenuItem()
         toggleItem.view = hostingView

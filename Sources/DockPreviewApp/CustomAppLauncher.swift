@@ -44,6 +44,70 @@ struct CustomApp: Identifiable, Codable, Equatable {
         default: return .blue
         }
     }
+    
+    /// Get the real app icon from the installed application
+    func getAppIcon() -> NSImage? {
+        guard let appPath = appPath else { return nil }
+        
+        // Check multiple possible locations
+        let possiblePaths = [
+            appPath,
+            NSHomeDirectory() + "/Applications/" + URL(fileURLWithPath: appPath).lastPathComponent
+        ]
+        
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return NSWorkspace.shared.icon(forFile: path)
+            }
+        }
+        
+        return nil
+    }
+    
+    /// Check if the app is installed
+    var isInstalled: Bool {
+        guard let appPath = appPath else { return false }
+        
+        let possiblePaths = [
+            appPath,
+            NSHomeDirectory() + "/Applications/" + URL(fileURLWithPath: appPath).lastPathComponent
+        ]
+        
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return true
+            }
+        }
+        
+        return false
+    }
+}
+
+// MARK: - App Icon View (shows real icon or SF Symbol fallback)
+
+struct AppIconView: View {
+    let app: CustomApp
+    let size: CGFloat
+    
+    init(app: CustomApp, size: CGFloat = 16) {
+        self.app = app
+        self.size = size
+    }
+    
+    var body: some View {
+        if let nsImage = app.getAppIcon() {
+            Image(nsImage: nsImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+        } else {
+            // Fallback to SF Symbol
+            Image(systemName: app.icon)
+                .font(.system(size: size * 0.75))
+                .foregroundColor(app.swiftUIColor)
+                .frame(width: size, height: size)
+        }
+    }
 }
 
 // MARK: - Preset Apps
@@ -397,13 +461,12 @@ struct CustomAppRow: View {
     let onDelete: () -> Void
     let onToggle: () -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
         HStack(spacing: 10) {
-            // App icon
-            Image(systemName: app.icon)
-                .font(.system(size: 12))
-                .foregroundColor(app.isEnabled ? app.swiftUIColor : .gray)
+            // App icon (real icon or SF Symbol fallback)
+            AppIconView(app: app, size: 18)
+                .opacity(app.isEnabled ? 1.0 : 0.5)
                 .frame(width: 20)
             
             // App name
@@ -512,18 +575,30 @@ struct PresetAppRow: View {
     let app: CustomApp
     let onAdd: () -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: app.icon)
-                .font(.system(size: 14))
-                .foregroundColor(app.swiftUIColor)
+            // Real app icon or SF Symbol fallback
+            AppIconView(app: app, size: 24)
                 .frame(width: 24)
-            
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(app.name)
-                    .font(.system(size: 12, weight: .medium))
-                
+                HStack(spacing: 6) {
+                    Text(app.name)
+                        .font(.system(size: 12, weight: .medium))
+                    
+                    // Show if app is installed
+                    if app.isInstalled {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.green)
+                    } else {
+                        Text("Not installed")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 if let path = app.appPath {
                     Text(path)
                         .font(.system(size: 10))
@@ -532,9 +607,9 @@ struct PresetAppRow: View {
                         .truncationMode(.middle)
                 }
             }
-            
+
             Spacer()
-            
+
             Button(action: onAdd) {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 16))
@@ -797,6 +872,55 @@ struct CustomAppEditorView: View {
     }
 }
 
+// MARK: - Real App Button (with actual app icon)
+
+struct RealAppButton: View {
+    let app: CustomApp
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                AppIconView(app: app, size: 20)
+                Text(app.name)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isHovered ? Color.primary.opacity(0.15) : Color.primary.opacity(0.08))
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+// MARK: - Real Mini App Button (with actual app icon)
+
+struct RealMiniAppButton: View {
+    let app: CustomApp
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            AppIconView(app: app, size: 20)
+                .opacity(isHovered ? 1.0 : 0.7)
+                .padding(4)
+                .background(isHovered ? Color.primary.opacity(0.1) : Color.clear)
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .help("Open in \(app.name)")
+    }
+}
+
 // MARK: - Dynamic App Buttons Row
 
 struct DynamicAppButtonsRow: View {
@@ -804,9 +928,9 @@ struct DynamicAppButtonsRow: View {
     let path: String
     
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ForEach(appManager.enabledApps) { app in
-                AppButton(icon: app.icon, label: app.name, color: app.swiftUIColor) {
+                RealAppButton(app: app) {
                     appManager.openWithApp(app, path: path)
                 }
             }
@@ -827,19 +951,24 @@ struct DynamicMiniAppButtons: View {
     }
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             if includeFinder {
-                MiniAppButton(icon: "folder", color: .gray) {
+                Button(action: {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+                }) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .padding(4)
                 }
+                .buttonStyle(.plain)
                 .help("Open in Finder")
             }
             
             ForEach(appManager.enabledApps) { app in
-                MiniAppButton(icon: app.icon, color: app.swiftUIColor) {
+                RealMiniAppButton(app: app) {
                     appManager.openWithApp(app, path: path)
                 }
-                .help("Open in \(app.name)")
             }
         }
     }
