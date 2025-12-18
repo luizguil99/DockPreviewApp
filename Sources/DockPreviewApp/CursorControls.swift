@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 // MARK: - Cursor Controller
 class CursorController {
@@ -65,6 +66,67 @@ class CursorController {
         runAppleScript(script)
     }
     
+    /// Sends an image file to Cursor chat
+    static func sendImage(imagePath: String) {
+        let escapedPath = imagePath.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        
+        let script = """
+        tell application "Cursor"
+            activate
+        end tell
+        delay 0.5
+        tell application "System Events"
+            keystroke "l" using {command down}
+            delay 0.3
+            keystroke "a" using {command down}
+            key code 51
+            delay 0.2
+            
+            -- Copy image file to clipboard and paste
+            set the clipboard to (read (POSIX file "\(escapedPath)") as JPEG picture)
+            delay 0.3
+            keystroke "v" using {command down}
+            delay 0.2
+        end tell
+        """
+        runAppleScript(script)
+    }
+    
+    /// Sends an image with a message to Cursor chat
+    static func sendImageWithMessage(imagePath: String, message: String) {
+        let escapedPath = imagePath.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedMessage = message.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        
+        let script = """
+        tell application "Cursor"
+            activate
+        end tell
+        delay 0.5
+        tell application "System Events"
+            keystroke "l" using {command down}
+            delay 0.3
+            keystroke "a" using {command down}
+            key code 51
+            delay 0.2
+            
+            -- Copy and paste image
+            set the clipboard to (read (POSIX file "\(escapedPath)") as JPEG picture)
+            delay 0.3
+            keystroke "v" using {command down}
+            delay 0.2
+            
+            -- Type the message
+            keystroke "\(escapedMessage)"
+            delay 0.1
+            key code 36
+        end tell
+        """
+        runAppleScript(script)
+    }
+    
     /// Opens the floating chat input window
     static func openChatInput() {
         // Close existing window if any
@@ -78,7 +140,7 @@ class CursorController {
         let hostingController = NSHostingController(rootView: contentView)
         
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 120),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 140),
             styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -117,6 +179,7 @@ class CursorController {
 // MARK: - Floating Chat Input View
 struct CursorChatInputView: View {
     @State private var message: String = ""
+    @State private var imagePath: String? = nil
     @FocusState private var isFocused: Bool
     var onClose: () -> Void
     
@@ -154,17 +217,54 @@ struct CursorChatInputView: View {
                 Spacer()
                 
                 // Close button
-                Button(action: onClose) {
+                Button(action: {
+                    onClose()
+                }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
                         .foregroundColor(.white.opacity(0.5))
                 }
                 .buttonStyle(.plain)
-                .onHover { h in }
+                .help("Fechar")
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
             .padding(.bottom, 10)
+            
+            // Image preview (if image is attached)
+            if let path = imagePath, let image = NSImage(contentsOfFile: path) {
+                HStack(spacing: 8) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .clipped()
+                    
+                    Text(URL(fileURLWithPath: path).lastPathComponent)
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    
+                    Spacer()
+                    
+                    // Remove image button
+                    Button(action: { imagePath = nil }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remover imagem")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(8)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
             
             // Input field
             HStack(spacing: 10) {
@@ -177,17 +277,30 @@ struct CursorChatInputView: View {
                         sendAndClose()
                     }
                 
+                // Image button
+                Button(action: selectImage) {
+                    Image(systemName: imagePath == nil ? "photo" : "photo.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(imagePath == nil ? .white.opacity(0.5) : cursorBlue)
+                        .frame(width: 32, height: 32)
+                        .background(imagePath == nil ? Color.white.opacity(0.05) : cursorBlue.opacity(0.15))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .help("Selecionar imagem")
+                
                 // Send button
                 Button(action: sendAndClose) {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(message.isEmpty ? .white.opacity(0.3) : cursorBlue)
+                        .foregroundColor(canSend ? cursorBlue : .white.opacity(0.3))
                         .frame(width: 32, height: 32)
-                        .background(message.isEmpty ? Color.white.opacity(0.1) : cursorBlue.opacity(0.2))
+                        .background(canSend ? cursorBlue.opacity(0.2) : Color.white.opacity(0.1))
                         .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
-                .disabled(message.isEmpty)
+                .disabled(!canSend)
+                .help("Enviar")
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
@@ -206,12 +319,40 @@ struct CursorChatInputView: View {
         }
     }
     
+    private var canSend: Bool {
+        !message.isEmpty || imagePath != nil
+    }
+    
+    private func selectImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .gif, .bmp, .tiff]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.message = "Selecione uma imagem"
+        
+        if panel.runModal() == .OK {
+            if let url = panel.url {
+                imagePath = url.path
+            }
+        }
+    }
+    
     private func sendAndClose() {
-        guard !message.isEmpty else { return }
+        guard canSend else { return }
         let msg = message
+        let imgPath = imagePath
         onClose()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            CursorController.sendMessage(msg)
+            if let path = imgPath {
+                if !msg.isEmpty {
+                    CursorController.sendImageWithMessage(imagePath: path, message: msg)
+                } else {
+                    CursorController.sendImage(imagePath: path)
+                }
+            } else {
+                CursorController.sendMessage(msg)
+            }
         }
     }
 }
