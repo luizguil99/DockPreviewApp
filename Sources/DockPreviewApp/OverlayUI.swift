@@ -170,6 +170,39 @@ struct KillProcessButton: View {
     }
 }
 
+// Spotify Like Button - heart icon to like current song
+struct SpotifyLikeButton: View {
+    let onTap: () -> Void
+    @State private var isHovered = false
+    @State private var isLiked = false
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isLiked ? Color.green.opacity(0.4) : (isHovered ? Color.green.opacity(0.3) : Color.white.opacity(0.1)))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Circle()
+                        .stroke(isLiked ? Color.green : (isHovered ? Color.green : Color.white.opacity(0.3)), lineWidth: 1)
+                )
+            
+            Image(systemName: isLiked ? "heart.fill" : "heart")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(isLiked ? .green : (isHovered ? .green : .white.opacity(0.6)))
+        }
+        .scaleEffect(isHovered ? 1.1 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.easeInOut(duration: 0.2), value: isLiked)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            isLiked.toggle()
+            onTap()
+        }
+    }
+}
+
 // Add Profile Button - appears at the end of Chrome windows
 struct AddProfileButton: View {
     let onTap: () -> Void
@@ -437,13 +470,22 @@ struct WindowsPreviewOverlay: View {
                             }
                         }
                         
-                        // Kill process button - small icon (centered vertically, after profiles)
+                        // Action buttons - small icons (centered vertically)
                         VStack {
                             Spacer()
-                            KillProcessButton {
-                                // Kill the first window's process (they all share the same PID)
-                                if let firstWindow = windowsModel.windows.first {
-                                    onKill(firstWindow)
+                            HStack(spacing: 6) {
+                                // Spotify like button
+                                if WindowFetcher.isSpotify(windowsModel.appName) {
+                                    SpotifyLikeButton {
+                                        WindowFetcher.spotifyToggleLike()
+                                    }
+                                }
+                                
+                                // Kill process button
+                                KillProcessButton {
+                                    if let firstWindow = windowsModel.windows.first {
+                                        onKill(firstWindow)
+                                    }
                                 }
                             }
                             Spacer()

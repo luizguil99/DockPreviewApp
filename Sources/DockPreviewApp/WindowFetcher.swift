@@ -451,4 +451,54 @@ class WindowFetcher {
             }
         }
     }
+    
+    // MARK: - Spotify Integration
+    
+    static func isSpotify(_ appName: String) -> Bool {
+        return appName.lowercased() == "spotify"
+    }
+    
+    /// Toggle like for current Spotify song using CGEvent sent directly to Spotify process
+    static func spotifyToggleLike() {
+        print("Toggling Spotify like via CGEvent to PID")
+        
+        // Find Spotify PID
+        let runningApps = NSWorkspace.shared.runningApplications
+        guard let spotify = runningApps.first(where: { $0.localizedName?.lowercased() == "spotify" }) else {
+            print("Spotify not running")
+            return
+        }
+        
+        let spotifyPID = spotify.processIdentifier
+        print("Spotify PID: \(spotifyPID)")
+        
+        // Create event source
+        guard let source = CGEventSource(stateID: .hidSystemState) else {
+            print("Failed to create event source")
+            return
+        }
+        
+        // Key code for 'B' is 11
+        let keyCode: CGKeyCode = 11
+        
+        // Create key down event with Option+Shift
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true) else {
+            print("Failed to create key down event")
+            return
+        }
+        keyDown.flags = [.maskAlternate, .maskShift]  // Option + Shift
+        
+        // Create key up event
+        guard let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+            print("Failed to create key up event")
+            return
+        }
+        keyUp.flags = [.maskAlternate, .maskShift]
+        
+        // Post events directly to Spotify's PID
+        keyDown.postToPid(spotifyPID)
+        keyUp.postToPid(spotifyPID)
+        
+        print("Sent Option+Shift+B directly to Spotify PID \(spotifyPID)")
+    }
 }
