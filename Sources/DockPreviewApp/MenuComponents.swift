@@ -602,46 +602,41 @@ struct FolderItemRow: View {
     let item: FolderItem
     var onFolderTap: ((String) -> Void)?
     @State private var isHovered = false
-    @State private var isHoveringOpen = false
+    @State private var showButtons = false
+    @State private var hoverTask: DispatchWorkItem?
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: {
-                if item.isDirectory {
-                    // Navigate into the folder
-                    onFolderTap?(item.path)
-                } else {
-                    // Open files normally
-                    NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
+            // Main clickable area
+            HStack(spacing: 12) {
+                Image(systemName: item.icon)
+                    .foregroundColor(item.iconColor)
+                    .font(.system(size: 18))
+                    .frame(width: 24)
+
+                Text(item.name)
+                    .font(.system(size: 14))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer()
+
+                // Show chevron for folders to indicate navigation
+                if item.isDirectory && !showButtons {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary.opacity(0.5))
                 }
-            }) {
-                HStack(spacing: 12) {
-                    Image(systemName: item.icon)
-                        .foregroundColor(item.iconColor)
-                        .font(.system(size: 18))
-                        .frame(width: 24)
-
-                    Text(item.name)
-                        .font(.system(size: 14))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    Spacer()
-
-                    // Show chevron for folders to indicate navigation
-                    if item.isDirectory && !isHovered {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary.opacity(0.5))
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle()) // Ensures entire area is clickable
+            .onTapGesture {
+                handleTap()
+            }
 
-            // Show app buttons for folders on hover (dynamic from CustomAppManager)
-            if item.isDirectory && isHovered {
+            // Show app buttons for folders on hover (with delay to prevent click interference)
+            if item.isDirectory && showButtons {
                 DynamicMiniAppButtons(path: item.path, includeFinder: true)
                     .padding(.trailing, 12)
             }
@@ -650,6 +645,35 @@ struct FolderItemRow: View {
         .cornerRadius(6)
         .onHover { hovering in
             isHovered = hovering
+            
+            // Cancel any pending task
+            hoverTask?.cancel()
+            
+            if hovering && item.isDirectory {
+                // Show buttons after a short delay to prevent interference with clicks
+                let task = DispatchWorkItem { [self] in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showButtons = true
+                    }
+                }
+                hoverTask = task
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: task)
+            } else {
+                // Hide buttons immediately when not hovering
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    showButtons = false
+                }
+            }
+        }
+    }
+    
+    private func handleTap() {
+        if item.isDirectory {
+            // Navigate into the folder
+            onFolderTap?(item.path)
+        } else {
+            // Open files normally
+            NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
         }
     }
 }

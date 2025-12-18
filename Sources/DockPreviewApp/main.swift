@@ -1,13 +1,19 @@
 import Cocoa
 import SwiftUI
+import Carbon.HIToolbox
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayManager: OverlayWindowManager?
     var statusItem: NSStatusItem?
+    var globalHotkeyMonitor: Any?
+    var localHotkeyMonitor: Any?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Setup menu bar FIRST (always works)
         setupMenuBar()
+        
+        // Setup global hotkey (⌥Space to open menu)
+        setupGlobalHotkey()
         
         // Hide dock icon for this background app
         NSApp.setActivationPolicy(.accessory)
@@ -24,6 +30,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         overlayManager = OverlayWindowManager()
         print("DockPreviewApp started. Accessibility trusted: \(trusted)")
+    }
+    
+    func setupGlobalHotkey() {
+        // Global monitor for when app is not focused (⌥Space)
+        globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleHotkey(event)
+        }
+        
+        // Local monitor for when app is focused
+        localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if self?.handleHotkey(event) == true {
+                return nil // Consume the event
+            }
+            return event
+        }
+        
+        print("Global hotkey setup: ⌃⌥D to open menu")
+    }
+    
+    @discardableResult
+    private func handleHotkey(_ event: NSEvent) -> Bool {
+        // Check for ⌃⌥D (Control + Option + D)
+        let controlPressed = event.modifierFlags.contains(.control)
+        let optionPressed = event.modifierFlags.contains(.option)
+        let isDKey = event.keyCode == 2 // D key
+        
+        if controlPressed && optionPressed && isDKey {
+            DispatchQueue.main.async {
+                self.openMenuBarMenu()
+            }
+            return true
+        }
+        return false
+    }
+    
+    func openMenuBarMenu() {
+        guard let button = statusItem?.button else {
+            print("No status item button found")
+            return
+        }
+        
+        // Simulate a click on the status item to open the menu
+        if let menu = statusItem?.menu {
+            // Position the menu below the status item button
+            let buttonFrame = button.window?.convertToScreen(button.frame) ?? .zero
+            menu.popUp(positioning: nil, at: NSPoint(x: buttonFrame.origin.x, y: buttonFrame.origin.y), in: nil)
+        }
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        // Cleanup hotkey monitors
+        if let monitor = globalHotkeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = localHotkeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
     
     func setupMenuBar() {
