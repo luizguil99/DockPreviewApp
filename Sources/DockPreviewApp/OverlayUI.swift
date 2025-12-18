@@ -170,70 +170,6 @@ struct KillProcessButton: View {
     }
 }
 
-// Spotify Control Button - generic button for Spotify controls
-struct SpotifyControlButton: View {
-    let icon: String
-    let color: Color
-    let onTap: () -> Void
-    @State private var isHovered = false
-    
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(isHovered ? color.opacity(0.3) : Color.white.opacity(0.1))
-                .frame(width: 24, height: 24)
-                .overlay(
-                    Circle()
-                        .stroke(isHovered ? color : Color.white.opacity(0.3), lineWidth: 1)
-                )
-            
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(isHovered ? color : .white.opacity(0.6))
-        }
-        .scaleEffect(isHovered ? 1.1 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
-        .onHover { hovering in
-            isHovered = hovering
-        }
-        .onTapGesture {
-            onTap()
-        }
-    }
-}
-
-// Spotify Like Button - heart icon to like current song
-struct SpotifyLikeButton: View {
-    let onTap: () -> Void
-    @State private var isHovered = false
-    @State private var isLiked = false
-    
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(isLiked ? Color.green.opacity(0.4) : (isHovered ? Color.green.opacity(0.3) : Color.white.opacity(0.1)))
-                .frame(width: 24, height: 24)
-                .overlay(
-                    Circle()
-                        .stroke(isLiked ? Color.green : (isHovered ? Color.green : Color.white.opacity(0.3)), lineWidth: 1)
-                )
-            
-            Image(systemName: isLiked ? "heart.fill" : "heart")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(isLiked ? .green : (isHovered ? .green : .white.opacity(0.6)))
-        }
-        .scaleEffect(isHovered ? 1.1 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
-        .animation(.easeInOut(duration: 0.2), value: isLiked)
-        .onHover { hovering in
-            isHovered = hovering
-        }
-        .onTapGesture {
-            isLiked.toggle()
-            onTap()
-        }
-    }
-}
 
 // Add Profile Button - appears at the end of Chrome windows
 struct AddProfileButton: View {
@@ -502,38 +438,17 @@ struct WindowsPreviewOverlay: View {
                             }
                         }
                         
-                        // Action buttons - small icons (centered vertically)
+                        // Spotify mini player (styled like a card)
+                        if SpotifyController.isSpotify(windowsModel.appName) {
+                            SpotifyMiniPlayerCard()
+                        }
+                        
+                        // Kill process button (centered vertically)
                         VStack {
                             Spacer()
-                            HStack(spacing: 6) {
-                                // Spotify controls
-                                if WindowFetcher.isSpotify(windowsModel.appName) {
-                                    // Previous track
-                                    SpotifyControlButton(icon: "backward.fill", color: .green) {
-                                        WindowFetcher.spotifyPrevious()
-                                    }
-                                    
-                                    // Play/Pause
-                                    SpotifyControlButton(icon: "playpause.fill", color: .green) {
-                                        WindowFetcher.spotifyPlayPause()
-                                    }
-                                    
-                                    // Next track
-                                    SpotifyControlButton(icon: "forward.fill", color: .green) {
-                                        WindowFetcher.spotifyNext()
-                                    }
-                                    
-                                    // Like button
-                                    SpotifyLikeButton {
-                                        WindowFetcher.spotifyToggleLike()
-                                    }
-                                }
-                                
-                                // Kill process button
-                                KillProcessButton {
-                                    if let firstWindow = windowsModel.windows.first {
-                                        onKill(firstWindow)
-                                    }
+                            KillProcessButton {
+                                if let firstWindow = windowsModel.windows.first {
+                                    onKill(firstWindow)
                                 }
                             }
                             Spacer()
