@@ -43,7 +43,6 @@ struct WindowPreviewCard: View {
     let onClose: () -> Void
     let onMinimize: () -> Void
     let onFullscreen: () -> Void
-    let onKill: () -> Void
     @State private var isHovered = false
     
     var body: some View {
@@ -87,13 +86,7 @@ struct WindowPreviewCard: View {
                             WindowControlButton(color: .green, systemName: "arrow.up.left.and.arrow.down.right") {
                                 onFullscreen()
                             }
-                            
                             Spacer()
-                            
-                            // Kill process button (right side)
-                            WindowControlButton(color: Color(red: 0.6, green: 0.1, blue: 0.1), systemName: "power") {
-                                onKill()
-                            }
                         }
                         .padding(6)
                         Spacer()
@@ -143,6 +136,36 @@ struct WindowPreviewCard: View {
         }
         .onTapGesture {
             onSelect()
+        }
+    }
+}
+
+// Kill Process Button - small icon button
+struct KillProcessButton: View {
+    let onTap: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isHovered ? Color.red.opacity(0.3) : Color.white.opacity(0.1))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Circle()
+                        .stroke(isHovered ? Color.red : Color.white.opacity(0.3), lineWidth: 1)
+                )
+            
+            Image(systemName: "power")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(isHovered ? .red : .white.opacity(0.6))
+        }
+        .scaleEffect(isHovered ? 1.1 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            onTap()
         }
     }
 }
@@ -401,18 +424,29 @@ struct WindowsPreviewOverlay: View {
                                 onSelect: { onSelect(window) },
                                 onClose: { onClose(window) },
                                 onMinimize: { onMinimize(window) },
-                                onFullscreen: { onFullscreen(window) },
-                                onKill: { onKill(window) }
+                                onFullscreen: { onFullscreen(window) }
                             )
                         }
                         
-                        // Add profile button at the end for Chromium browsers
+                        // Add profile button for Chromium browsers
                         if hasProfiles {
                             AddProfileButton {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     windowsModel.showOnlyProfiles = true
                                 }
                             }
+                        }
+                        
+                        // Kill process button - small icon (centered vertically, after profiles)
+                        VStack {
+                            Spacer()
+                            KillProcessButton {
+                                // Kill the first window's process (they all share the same PID)
+                                if let firstWindow = windowsModel.windows.first {
+                                    onKill(firstWindow)
+                                }
+                            }
+                            Spacer()
                         }
                     }
                     .padding(.horizontal, 12)
