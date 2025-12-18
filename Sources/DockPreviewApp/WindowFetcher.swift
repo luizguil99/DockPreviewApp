@@ -12,6 +12,32 @@ struct AppWindow {
 }
 
 class WindowFetcher {
+    // Cache for last successful window captures (key: "pid-title")
+    private static var imageCache: [String: NSImage] = [:]
+    private static let maxCacheSize = 50 // Limit cache to 50 images
+    
+    private static func cacheKey(pid: pid_t, title: String) -> String {
+        return "\(pid)-\(title)"
+    }
+    
+    private static func cleanupCacheIfNeeded() {
+        if imageCache.count > maxCacheSize {
+            // Remove oldest entries (simple approach: remove half)
+            let keysToRemove = Array(imageCache.keys.prefix(imageCache.count / 2))
+            for key in keysToRemove {
+                imageCache.removeValue(forKey: key)
+            }
+            print("Cache cleaned: removed \(keysToRemove.count) entries")
+        }
+    }
+    
+    static func clearCache(for pid: pid_t) {
+        let keysToRemove = imageCache.keys.filter { $0.hasPrefix("\(pid)-") }
+        for key in keysToRemove {
+            imageCache.removeValue(forKey: key)
+        }
+    }
+    
     static func getWindows(for appName: String) -> [AppWindow] {
         print("Fetching windows for: \(appName)")
         let runningApps = NSWorkspace.shared.runningApplications
@@ -88,6 +114,9 @@ class WindowFetcher {
             let windowID = CGWindowID(pid) * 1000 + CGWindowID(windowIndex)
             windowIndex += 1
             
+            let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
+            let cacheKeyStr = cacheKey(pid: pid, title: displayTitle)
+            
             // Get image - pass mutable cgWindowsMap to remove used windows
             var image: NSImage?
             if isMinimized {
@@ -95,10 +124,19 @@ class WindowFetcher {
             } else {
                 // Try to find matching CG window for image capture
                 image = findAndCaptureImage(bounds: bounds, title: title, cgWindows: &cgWindowsMap)
+                
+                if let capturedImage = image {
+                    // Cache successful capture
+                    imageCache[cacheKeyStr] = capturedImage
+                    cleanupCacheIfNeeded()
+                } else if let cachedImage = imageCache[cacheKeyStr] {
+                    // Use cached image as fallback
+                    image = cachedImage
+                    print("Using cached image for: \(displayTitle)")
+                }
             }
             
-            let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
-            print("Added window: \(displayTitle) (minimized: \(isMinimized))")
+            print("Added window: \(displayTitle) (minimized: \(isMinimized), hasImage: \(image != nil))")
             
             windows.append(AppWindow(
                 id: windowID,
@@ -200,7 +238,19 @@ class WindowFetcher {
             
             let title = info[kCGWindowName as String] as? String ?? "Window"
             let windowID = CGWindowID(idNum)
-            let image = captureWindowImage(windowID: windowID, bounds: bounds)
+            let cacheKeyStr = cacheKey(pid: pid, title: title)
+            
+            var image = captureWindowImage(windowID: windowID, bounds: bounds)
+            
+            if let capturedImage = image {
+                // Cache successful capture
+                imageCache[cacheKeyStr] = capturedImage
+                cleanupCacheIfNeeded()
+            } else if let cachedImage = imageCache[cacheKeyStr] {
+                // Use cached image as fallback
+                image = cachedImage
+                print("Using cached image for: \(title)")
+            }
             
             windows.append(AppWindow(id: windowID, title: title, image: image, bounds: bounds, ownerPID: pid, isMinimized: false, axElement: nil))
         }
@@ -303,6 +353,10 @@ class WindowFetcher {
             return
         }
         
+        // Remove from cache
+        let cacheKeyStr = cacheKey(pid: window.ownerPID, title: window.title)
+        imageCache.removeValue(forKey: cacheKeyStr)
+        
         // Get the close button and press it
         var closeButton: AnyObject?
         let result = AXUIElementCopyAttributeValue(axElement, kAXCloseButtonAttribute as CFString, &closeButton)
@@ -377,6 +431,9 @@ class WindowFetcher {
         print("Killing process for window: \(window.title)")
         
         let pid = window.ownerPID
+        
+        // Clear cache for this process
+        clearCache(for: pid)
         
         // Use kill signal to terminate the process
         let result = kill(pid, SIGTERM)
