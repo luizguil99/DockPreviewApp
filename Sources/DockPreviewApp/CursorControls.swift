@@ -4,6 +4,8 @@ import AppKit
 // MARK: - Cursor Controller
 class CursorController {
     
+    static var chatWindow: NSWindow?
+    
     static func isCursor(_ appName: String) -> Bool {
         return appName.lowercased() == "cursor"
     }
@@ -39,6 +41,66 @@ class CursorController {
         runAppleScript(script)
     }
     
+    /// Sends a message to Cursor chat
+    static func sendMessage(_ message: String) {
+        let escapedMessage = message.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        
+        let script = """
+        tell application "Cursor"
+            activate
+        end tell
+        delay 0.5
+        tell application "System Events"
+            keystroke "l" using {command down}
+            delay 0.3
+            keystroke "a" using {command down}
+            key code 51
+            delay 0.1
+            keystroke "\(escapedMessage)"
+            delay 0.1
+            key code 36
+        end tell
+        """
+        runAppleScript(script)
+    }
+    
+    /// Opens the floating chat input window
+    static func openChatInput() {
+        // Close existing window if any
+        chatWindow?.close()
+        
+        let contentView = CursorChatInputView {
+            chatWindow?.close()
+            chatWindow = nil
+        }
+        
+        let hostingController = NSHostingController(rootView: contentView)
+        
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 120),
+            styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.level = .floating
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        window.contentViewController = hostingController
+        window.center()
+        
+        // Activate app to allow typing
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        
+        chatWindow = window
+    }
+    
     private static func runAppleScript(_ script: String) {
         DispatchQueue.global(qos: .userInitiated).async {
             var error: NSDictionary?
@@ -48,6 +110,108 @@ class CursorController {
                     print("AppleScript error: \(error)")
                 }
             }
+        }
+    }
+}
+
+// MARK: - Floating Chat Input View
+struct CursorChatInputView: View {
+    @State private var message: String = ""
+    @FocusState private var isFocused: Bool
+    var onClose: () -> Void
+    
+    let cursorBlue = Color(red: 0.4, green: 0.6, blue: 1.0)
+    
+    // Get Cursor app icon
+    private var cursorIcon: NSImage? {
+        let appPaths = [
+            "/Applications/Cursor.app",
+            NSHomeDirectory() + "/Applications/Cursor.app"
+        ]
+        for path in appPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return NSWorkspace.shared.icon(forFile: path)
+            }
+        }
+        return nil
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 8) {
+                if let icon = cursorIcon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                }
+                
+                Text("Send to Cursor")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                
+                Spacer()
+                
+                // Close button
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .onHover { h in }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            
+            // Input field
+            HStack(spacing: 10) {
+                TextField("Ask Cursor AI anything...", text: $message)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
+                    .focused($isFocused)
+                    .onSubmit {
+                        sendAndClose()
+                    }
+                
+                // Send button
+                Button(action: sendAndClose) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(message.isEmpty ? .white.opacity(0.3) : cursorBlue)
+                        .frame(width: 32, height: 32)
+                        .background(message.isEmpty ? Color.white.opacity(0.1) : cursorBlue.opacity(0.2))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .disabled(message.isEmpty)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .frame(width: 500)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(red: 0.12, green: 0.12, blue: 0.14))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(cursorBlue.opacity(0.3), lineWidth: 1)
+        )
+        .onAppear {
+            isFocused = true
+        }
+    }
+    
+    private func sendAndClose() {
+        guard !message.isEmpty else { return }
+        let msg = message
+        onClose()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            CursorController.sendMessage(msg)
         }
     }
 }
@@ -103,6 +267,15 @@ struct CursorQuickActionsCard: View {
             
             // Action buttons
             HStack(spacing: 8) {
+                // Ask AI button (opens floating input)
+                actionButton(
+                    icon: "sparkles",
+                    label: "Ask",
+                    id: "ask"
+                ) {
+                    CursorController.openChatInput()
+                }
+                
                 // New Chat button
                 actionButton(
                     icon: "plus.message.fill",
