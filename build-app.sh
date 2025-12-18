@@ -9,6 +9,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Generate icon if it doesn't exist
+if [ ! -f "AppIcon.icns" ]; then
+    echo "🎨 Generating app icon..."
+    swift generate-icon.swift
+fi
+
 # Create app bundle structure
 APP_NAME="DockPreviewApp"
 APP_BUNDLE="$APP_NAME.app"
@@ -28,6 +34,12 @@ mkdir -p "$RESOURCES_DIR"
 # Copy executable
 cp ".build/release/$APP_NAME" "$MACOS_DIR/"
 
+# Copy icon if exists
+if [ -f "AppIcon.icns" ]; then
+    cp "AppIcon.icns" "$RESOURCES_DIR/"
+    echo "✓ Icon added to bundle"
+fi
+
 # Create Info.plist
 cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,6 +50,8 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <string>en</string>
     <key>CFBundleExecutable</key>
     <string>DockPreviewApp</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.dockpreview.app</string>
     <key>CFBundleInfoDictionaryVersion</key>

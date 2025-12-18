@@ -6,22 +6,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Request permissions
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        let trusted = AXIsProcessTrustedWithOptions(options)
-        
-        if !trusted {
-            print("Please grant Accessibility permissions in System Settings.")
-        }
-        
-        // Setup menu bar FIRST
+        // Setup menu bar FIRST (always works)
         setupMenuBar()
         
         // Hide dock icon for this background app
         NSApp.setActivationPolicy(.accessory)
         
+        // Check accessibility permissions - only prompt once
+        let trusted = AXIsProcessTrusted()
+        
+        if !trusted {
+            print("Accessibility permissions needed. Showing prompt...")
+            // Show prompt only once
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+        }
+        
         overlayManager = OverlayWindowManager()
-        print("DockPreviewApp started.")
+        print("DockPreviewApp started. Accessibility trusted: \(trusted)")
     }
     
     func setupMenuBar() {

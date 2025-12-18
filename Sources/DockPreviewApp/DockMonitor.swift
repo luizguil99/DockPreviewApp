@@ -203,12 +203,9 @@ class DockMonitor: ObservableObject {
     }
 
     private func getDockAXUIElement() -> AXUIElement? {
-        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [promptKey: true] as CFDictionary
-        
-        // Just check trusted, prompt handled in main
-        if !AXIsProcessTrustedWithOptions(options) {
-            // print("Accessibilty permissions needed")
+        // Check without prompting - prompt is only shown once at startup in main.swift
+        if !AXIsProcessTrusted() {
+            return nil
         }
 
         let runningApps = NSWorkspace.shared.runningApplications
