@@ -1,6 +1,27 @@
 import Cocoa
 import SwiftUI
 
+// Custom view for toggle switch in menu
+struct MenuToggleView: View {
+    let title: String
+    @Binding var isOn: Bool
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 13))
+            Spacer()
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .scaleEffect(0.8)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .frame(width: 200)
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayManager: OverlayWindowManager?
     var statusItem: NSStatusItem?
@@ -45,13 +66,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         let menu = NSMenu()
         
-        let toggleItem = NSMenuItem(title: "Click to Hide", action: #selector(toggleClickToHide), keyEquivalent: "")
-        toggleItem.target = self
-        toggleItem.state = .on
+        // Click to Hide toggle with slider
+        let toggleView = MenuToggleView(
+            title: "Click to Hide",
+            isOn: Binding(
+                get: { DockMonitor.shared.clickToHideEnabled },
+                set: { DockMonitor.shared.clickToHideEnabled = $0 }
+            )
+        )
+        let hostingView = NSHostingView(rootView: toggleView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 200, height: 28)
+        
+        let toggleItem = NSMenuItem()
+        toggleItem.view = hostingView
         menu.addItem(toggleItem)
         
         menu.addItem(NSMenuItem.separator())
         
+        // Permissions section header
+        let permissionsHeader = NSMenuItem(title: "Permissions", action: nil, keyEquivalent: "")
+        permissionsHeader.isEnabled = false
+        menu.addItem(permissionsHeader)
+        
+        // Accessibility permission
+        let accessibilityItem = NSMenuItem(title: "   Accessibility...", action: #selector(openAccessibilitySettings), keyEquivalent: "")
+        accessibilityItem.target = self
+        if let icon = NSImage(systemSymbolName: "hand.raised.fill", accessibilityDescription: "Accessibility") {
+            icon.isTemplate = true
+            accessibilityItem.image = icon
+        }
+        menu.addItem(accessibilityItem)
+        
+        // Screen Recording permission
+        let screenRecordingItem = NSMenuItem(title: "   Screen Recording...", action: #selector(openScreenRecordingSettings), keyEquivalent: "")
+        screenRecordingItem.target = self
+        if let icon = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Screen Recording") {
+            icon.isTemplate = true
+            screenRecordingItem.image = icon
+        }
+        menu.addItem(screenRecordingItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Quit
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -61,9 +118,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("Menu bar setup complete")
     }
     
-    @objc func toggleClickToHide(_ sender: NSMenuItem) {
-        DockMonitor.shared.clickToHideEnabled.toggle()
-        sender.state = DockMonitor.shared.clickToHideEnabled ? .on : .off
+    @objc func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    @objc func openScreenRecordingSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
     
     @objc func quitApp() {
