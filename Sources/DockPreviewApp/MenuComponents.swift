@@ -117,6 +117,49 @@ class FolderPickerManager: ObservableObject {
         }
     }
     
+    func showNewFolderDialog(completion: @escaping (Bool) -> Void) {
+        guard currentBrowsePath != nil else { 
+            completion(false)
+            return 
+        }
+        
+        // Activate the app temporarily to show the dialog
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        let alert = NSAlert()
+        alert.messageText = "New Folder"
+        alert.informativeText = "Enter a name for the new folder:"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
+        
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        textField.stringValue = "New Folder"
+        textField.placeholderString = "Folder name"
+        alert.accessoryView = textField
+        
+        // Make the text field first responder
+        alert.window.initialFirstResponder = textField
+        
+        let response = alert.runModal()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.setActivationPolicy(.accessory)
+        }
+        
+        if response == .alertFirstButtonReturn {
+            let folderName = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !folderName.isEmpty {
+                let success = self.createNewFolder(named: folderName)
+                completion(success)
+                return
+            }
+        }
+        
+        completion(false)
+    }
+    
     func selectFolder() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -298,8 +341,6 @@ struct MenuFolderBrowserView: View {
     @State private var isHoveringBack = false
     @State private var isHoveringNewFolder = false
     @State private var isHoveringHome = false
-    @State private var showNewFolderAlert = false
-    @State private var newFolderName = ""
     
     var currentFolderName: String {
         if let path = manager.currentBrowsePath {
@@ -389,8 +430,11 @@ struct MenuFolderBrowserView: View {
                 // New folder button
                 if manager.selectedFolder != nil {
                     Button(action: { 
-                        newFolderName = "New Folder"
-                        showNewFolderAlert = true
+                        manager.showNewFolderDialog { success in
+                            if success {
+                                loadFolderContents()
+                            }
+                        }
                     }) {
                         Image(systemName: "folder.badge.plus")
                             .font(.system(size: 13))
@@ -505,19 +549,6 @@ struct MenuFolderBrowserView: View {
         }
         .onReceive(manager.$currentBrowsePath) { _ in
             loadFolderContents()
-        }
-        .alert("New Folder", isPresented: $showNewFolderAlert) {
-            TextField("Folder name", text: $newFolderName)
-            Button("Cancel", role: .cancel) { }
-            Button("Create") {
-                if !newFolderName.isEmpty {
-                    if manager.createNewFolder(named: newFolderName) {
-                        loadFolderContents()
-                    }
-                }
-            }
-        } message: {
-            Text("Enter a name for the new folder")
         }
     }
     
