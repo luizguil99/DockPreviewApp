@@ -666,6 +666,10 @@ class OverlayWindowManager: ObservableObject {
         let screenHeight = screen.frame.height
         let maxPanelWidth = screenFrame.width - 32
         
+        // Force layout update to get correct size
+        hostingView.invalidateIntrinsicContentSize()
+        hostingView.layoutSubtreeIfNeeded()
+        
         // Recalculate fitting size
         var fittingSize = hostingView.fittingSize
         if fittingSize.width > maxPanelWidth {
@@ -771,12 +775,19 @@ class OverlayWindowManager: ObservableObject {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         self?.updateOverlay()
                         self?.isRefreshing = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self?.resizePanel()
+                        }
                     }
                 },
                 onClose: { [weak self] window in
                     WindowFetcher.closeWindow(window: window)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         self?.updateOverlay()
+                        // Force resize after SwiftUI updates
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self?.resizePanel()
+                        }
                     }
                 },
                 onMinimize: { [weak self] window in
@@ -785,6 +796,9 @@ class OverlayWindowManager: ObservableObject {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         self?.updateOverlay()
                         self?.isRefreshing = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self?.resizePanel()
+                        }
                     }
                 },
                 onFullscreen: { [weak self] window in
@@ -794,12 +808,18 @@ class OverlayWindowManager: ObservableObject {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         self?.updateOverlay()
                         self?.isRefreshing = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self?.resizePanel()
+                        }
                     }
                 },
                 onKill: { [weak self] window in
                     WindowFetcher.killProcess(window: window)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         self?.updateOverlay()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self?.resizePanel()
+                        }
                     }
                 },
                 onProfileSelect: { [weak self] profile in
@@ -810,6 +830,10 @@ class OverlayWindowManager: ObservableObject {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         self.updateOverlay()
                         self.isRefreshing = false
+                        // Force resize after SwiftUI updates
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self.resizePanel()
+                        }
                     }
                 },
                 maxWidth: maxPanelWidth
@@ -826,6 +850,10 @@ class OverlayWindowManager: ObservableObject {
         
         // Size the panel to fit content (but respect max width)
         guard let hostingView = hostingView else { return }
+        
+        // Force layout update before calculating size
+        hostingView.layoutSubtreeIfNeeded()
+        
         var fittingSize = hostingView.fittingSize
         if fittingSize.width > maxPanelWidth {
             fittingSize.width = maxPanelWidth
