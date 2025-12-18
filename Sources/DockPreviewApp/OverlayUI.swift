@@ -170,6 +170,38 @@ struct KillProcessButton: View {
     }
 }
 
+// Spotify Control Button - generic button for Spotify controls
+struct SpotifyControlButton: View {
+    let icon: String
+    let color: Color
+    let onTap: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isHovered ? color.opacity(0.3) : Color.white.opacity(0.1))
+                .frame(width: 24, height: 24)
+                .overlay(
+                    Circle()
+                        .stroke(isHovered ? color : Color.white.opacity(0.3), lineWidth: 1)
+                )
+            
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(isHovered ? color : .white.opacity(0.6))
+        }
+        .scaleEffect(isHovered ? 1.1 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            onTap()
+        }
+    }
+}
+
 // Spotify Like Button - heart icon to like current song
 struct SpotifyLikeButton: View {
     let onTap: () -> Void
@@ -474,8 +506,24 @@ struct WindowsPreviewOverlay: View {
                         VStack {
                             Spacer()
                             HStack(spacing: 6) {
-                                // Spotify like button
+                                // Spotify controls
                                 if WindowFetcher.isSpotify(windowsModel.appName) {
+                                    // Previous track
+                                    SpotifyControlButton(icon: "backward.fill", color: .green) {
+                                        WindowFetcher.spotifyPrevious()
+                                    }
+                                    
+                                    // Play/Pause
+                                    SpotifyControlButton(icon: "playpause.fill", color: .green) {
+                                        WindowFetcher.spotifyPlayPause()
+                                    }
+                                    
+                                    // Next track
+                                    SpotifyControlButton(icon: "forward.fill", color: .green) {
+                                        WindowFetcher.spotifyNext()
+                                    }
+                                    
+                                    // Like button
                                     SpotifyLikeButton {
                                         WindowFetcher.spotifyToggleLike()
                                     }

@@ -501,4 +501,67 @@ class WindowFetcher {
         
         print("Sent Option+Shift+B directly to Spotify PID \(spotifyPID)")
     }
+    
+    /// Play/Pause Spotify
+    static func spotifyPlayPause() {
+        print("Spotify play/pause")
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let script = """
+            tell application "Spotify" to playpause
+            """
+            
+            var error: NSDictionary?
+            if let scriptObject = NSAppleScript(source: script) {
+                scriptObject.executeAndReturnError(&error)
+                if let error = error {
+                    print("AppleScript error: \(error)")
+                } else {
+                    print("Spotify play/pause toggled")
+                }
+            }
+        }
+    }
+    
+    /// Skip to next track
+    static func spotifyNext() {
+        print("Spotify next track")
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let script = """
+            tell application "Spotify" to next track
+            """
+            
+            var error: NSDictionary?
+            if let scriptObject = NSAppleScript(source: script) {
+                scriptObject.executeAndReturnError(&error)
+                if let error = error {
+                    print("AppleScript error: \(error)")
+                } else {
+                    print("Spotify skipped to next")
+                }
+            }
+        }
+    }
+    
+    /// Go to previous track
+    static func spotifyPrevious() {
+        print("Spotify previous track")
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let script = """
+            tell application "Spotify" to previous track
+            """
+            
+            var error: NSDictionary?
+            if let scriptObject = NSAppleScript(source: script) {
+                scriptObject.executeAndReturnError(&error)
+                if let error = error {
+                    print("AppleScript error: \(error)")
+                } else {
+                    print("Spotify went to previous")
+                }
+            }
+        }
+    }
 }
