@@ -199,6 +199,7 @@ class OverlayWindowManager: ObservableObject {
     private var panel: NSPanel?
     private var cancellables = Set<AnyCancellable>()
     private var checkTimer: Timer?
+    private var isRefreshing = false // Flag to prevent closing during refresh
     
     init() {
         // Setup subscribers - use shared DockMonitor
@@ -208,9 +209,36 @@ class OverlayWindowManager: ObservableObject {
                 self?.handleIconChange(icon)
             }
             .store(in: &cancellables)
+        
+        // Listen for dock icon clicks to refresh overlay
+        DockMonitor.shared.$dockIconClicked
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] clickedIconTitle in
+                guard let clickedIconTitle = clickedIconTitle,
+                      let self = self,
+                      let currentIcon = self.currentIcon,
+                      currentIcon.title == clickedIconTitle else { return }
+                
+                print("Dock icon clicked: \(clickedIconTitle) - will refresh overlay")
+                self.isRefreshing = true
+                
+                // Refresh overlay after a delay to capture updated window
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.updateOverlay()
+                    self.isRefreshing = false
+                    // Reset the clicked state
+                    DockMonitor.shared.dockIconClicked = nil
+                }
+            }
+            .store(in: &cancellables)
     }
     
     private func handleIconChange(_ icon: DockIcon?) {
+        // Don't change icon while refreshing
+        if isRefreshing && icon == nil {
+            return
+        }
+        
         if let newIcon = icon {
             // New icon hovered, switch immediately
             self.currentIcon = newIcon
@@ -235,6 +263,11 @@ class OverlayWindowManager: ObservableObject {
     }
     
     private func checkMouseOverPanel() {
+        // Don't close while refreshing
+        if isRefreshing {
+            return
+        }
+        
         guard let panel = panel, panel.isVisible else {
             // Panel not visible, just clear
             self.currentIcon = nil
@@ -315,23 +348,43 @@ class OverlayWindowManager: ObservableObject {
         
         let contentView = PreviewOverlay(
             windows: windows,
-            onSelect: { window in
+            onSelect: { [weak self] window in
+                self?.isRefreshing = true
                 WindowFetcher.activateWindow(window: window)
+                // Refresh overlay after a short delay to capture updated window image
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    self?.updateOverlay()
+                    self?.isRefreshing = false
+                }
             },
             onClose: { [weak self] window in
                 WindowFetcher.closeWindow(window: window)
-                self?.updateOverlay()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self?.updateOverlay()
+                }
             },
             onMinimize: { [weak self] window in
+                self?.isRefreshing = true
                 WindowFetcher.minimizeWindow(window: window)
-                self?.updateOverlay()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self?.updateOverlay()
+                    self?.isRefreshing = false
+                }
             },
-            onFullscreen: { window in
+            onFullscreen: { [weak self] window in
+                self?.isRefreshing = true
                 WindowFetcher.toggleFullscreen(window: window)
+                // Refresh after fullscreen to capture new size
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self?.updateOverlay()
+                    self?.isRefreshing = false
+                }
             },
             onKill: { [weak self] window in
                 WindowFetcher.killProcess(window: window)
-                self?.updateOverlay()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self?.updateOverlay()
+                }
             },
             maxWidth: maxPanelWidth
         )

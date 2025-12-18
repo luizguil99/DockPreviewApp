@@ -13,6 +13,7 @@ class DockMonitor: ObservableObject {
     static let shared = DockMonitor()
     
     @Published var hoveredIcon: DockIcon?
+    @Published var dockIconClicked: String? // Notifies when a dock icon is clicked
     @Published var clickToHideEnabled: Bool = true {
         didSet {
             UserDefaults.standard.set(clickToHideEnabled, forKey: "clickToHideEnabled")
@@ -141,13 +142,25 @@ class DockMonitor: ObservableObject {
         if app.bundleIdentifier == lastActiveAppBundleID && !app.isHidden {
             print("Intercepting click - hiding: \(clickedIcon.title)")
             app.hide()
+            // Notify that dock icon was clicked (for overlay refresh)
+            DispatchQueue.main.async {
+                self.dockIconClicked = clickedIcon.title
+            }
             return nil // Block the click from reaching Dock
         } else if app.isHidden {
             print("App is hidden, letting Dock unhide: \(clickedIcon.title)")
+            // Notify that dock icon was clicked (for overlay refresh)
+            DispatchQueue.main.async {
+                self.dockIconClicked = clickedIcon.title
+            }
             return Unmanaged.passRetained(event) // Let Dock handle unhide
         }
         
         print("App not active or other state - passing through click")
+        // Notify that dock icon was clicked (for overlay refresh)
+        DispatchQueue.main.async {
+            self.dockIconClicked = clickedIcon.title
+        }
         return Unmanaged.passRetained(event) // Pass through for other cases
     }
     
