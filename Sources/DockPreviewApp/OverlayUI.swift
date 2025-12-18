@@ -228,13 +228,19 @@ class OverlayWindowManager: ObservableObject {
                     self.isRefreshing = false
                     // Reset the clicked state
                     DockMonitor.shared.dockIconClicked = nil
+                    
+                    // IMPORTANT: Check if we should close the overlay now
+                    // (in case hoveredIcon became nil while we were refreshing)
+                    if DockMonitor.shared.hoveredIcon == nil {
+                        self.startCheckTimer()
+                    }
                 }
             }
             .store(in: &cancellables)
     }
     
     private func handleIconChange(_ icon: DockIcon?) {
-        // Don't change icon while refreshing
+        // Don't change icon while refreshing - but we'll check again after refresh ends
         if isRefreshing && icon == nil {
             return
         }
