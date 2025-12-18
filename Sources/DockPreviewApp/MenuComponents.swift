@@ -61,12 +61,60 @@ class FolderPickerManager: ObservableObject {
         didSet {
             if let path = selectedFolder {
                 UserDefaults.standard.set(path, forKey: "selectedFolderPath")
+                // Reset current browsing path when root folder changes
+                currentBrowsePath = path
             }
         }
     }
     
+    @Published var currentBrowsePath: String?
+    
     init() {
         selectedFolder = UserDefaults.standard.string(forKey: "selectedFolderPath")
+        currentBrowsePath = selectedFolder
+    }
+    
+    var isAtRootFolder: Bool {
+        guard let root = selectedFolder, let current = currentBrowsePath else {
+            return true
+        }
+        return root == current
+    }
+    
+    func navigateToFolder(_ path: String) {
+        currentBrowsePath = path
+    }
+    
+    func navigateBack() {
+        guard let current = currentBrowsePath,
+              let root = selectedFolder else { return }
+        
+        let parentPath = (current as NSString).deletingLastPathComponent
+        
+        // Don't go above the root folder
+        if parentPath.hasPrefix(root) || parentPath == root {
+            currentBrowsePath = parentPath
+        } else {
+            currentBrowsePath = root
+        }
+    }
+    
+    func navigateToRoot() {
+        currentBrowsePath = selectedFolder
+    }
+    
+    func createNewFolder(named name: String) -> Bool {
+        guard let currentPath = currentBrowsePath else { return false }
+        
+        let newFolderPath = (currentPath as NSString).appendingPathComponent(name)
+        
+        do {
+            try FileManager.default.createDirectory(atPath: newFolderPath, withIntermediateDirectories: false, attributes: nil)
+            return true
+        } catch {
+            print("Error creating folder: \(error)")
+            return false
+        }
     }
     
     func selectFolder() {
@@ -247,9 +295,14 @@ struct MenuFolderBrowserView: View {
     @State private var allItems: [FolderItem] = []
     @State private var searchText: String = ""
     @State private var isHoveringHeader = false
+    @State private var isHoveringBack = false
+    @State private var isHoveringNewFolder = false
+    @State private var isHoveringHome = false
+    @State private var showNewFolderAlert = false
+    @State private var newFolderName = ""
     
-    var folderName: String {
-        if let path = manager.selectedFolder {
+    var currentFolderName: String {
+        if let path = manager.currentBrowsePath {
             return URL(fileURLWithPath: path).lastPathComponent
         }
         return "Select Folder"
@@ -264,47 +317,112 @@ struct MenuFolderBrowserView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header with folder name
-            Button(action: { manager.selectFolder() }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "folder.fill")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 14))
+            // Navigation header
+            HStack(spacing: 6) {
+                // Back button (only show when not at root)
+                if !manager.isAtRootFolder {
+                    Button(action: { 
+                        manager.navigateBack()
+                        loadFolderContents()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(isHoveringBack ? .primary : .secondary)
+                            .frame(width: 24, height: 24)
+                            .background(isHoveringBack ? Color.primary.opacity(0.1) : Color.clear)
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringBack = hovering
+                    }
+                    .help("Back")
                     
-                    Text(folderName)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
+                    // Home button to go directly to root
+                    Button(action: { 
+                        manager.navigateToRoot()
+                        loadFolderContents()
+                    }) {
+                        Image(systemName: "house")
+                            .font(.system(size: 11))
+                            .foregroundColor(isHoveringHome ? .primary : .secondary)
+                            .frame(width: 24, height: 24)
+                            .background(isHoveringHome ? Color.primary.opacity(0.1) : Color.clear)
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringHome = hovering
+                    }
+                    .help("Go to root folder")
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(isHoveringHeader ? Color.primary.opacity(0.1) : Color.clear)
-                .cornerRadius(6)
+                
+                // Folder name button
+                Button(action: { manager.selectFolder() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.fill")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 13))
+                        
+                        Text(currentFolderName)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(isHoveringHeader ? Color.primary.opacity(0.1) : Color.clear)
+                    .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    isHoveringHeader = hovering
+                }
+                .help("Change root folder")
+                
+                Spacer()
+                
+                // New folder button
+                if manager.selectedFolder != nil {
+                    Button(action: { 
+                        newFolderName = "New Folder"
+                        showNewFolderAlert = true
+                    }) {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 13))
+                            .foregroundColor(isHoveringNewFolder ? .blue : .secondary)
+                            .frame(width: 28, height: 24)
+                            .background(isHoveringNewFolder ? Color.blue.opacity(0.1) : Color.clear)
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringNewFolder = hovering
+                    }
+                    .help("Create new folder")
+                }
             }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                isHoveringHeader = hovering
-            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             
             // App buttons row
             if manager.selectedFolder != nil {
                 HStack(spacing: 6) {
                     AppButton(icon: "cursorarrow.rays", label: "Cursor", color: .blue) {
-                        manager.openInCursor()
+                        manager.openInCursor(path: manager.currentBrowsePath)
                     }
                     AppButton(icon: "chevron.left.forwardslash.chevron.right", label: "VSCode", color: .cyan) {
-                        manager.openInVSCode()
+                        manager.openInVSCode(path: manager.currentBrowsePath)
                     }
                     AppButton(icon: "text.cursor", label: "Zed", color: .orange) {
-                        manager.openInZed()
+                        manager.openInZed(path: manager.currentBrowsePath)
                     }
                     AppButton(icon: "terminal", label: "Warp", color: .pink) {
-                        manager.openInWarp()
+                        manager.openInWarp(path: manager.currentBrowsePath)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -355,7 +473,11 @@ struct MenuFolderBrowserView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
                             ForEach(filteredItems) { item in
-                                FolderItemRow(item: item)
+                                FolderItemRow(item: item, onFolderTap: { path in
+                                    manager.navigateToFolder(path)
+                                    searchText = ""
+                                    loadFolderContents()
+                                })
                             }
                         }
                         .padding(.vertical, 6)
@@ -373,15 +495,34 @@ struct MenuFolderBrowserView: View {
         }
         .frame(width: 280)
         .onAppear {
+            if manager.currentBrowsePath == nil {
+                manager.currentBrowsePath = manager.selectedFolder
+            }
             loadFolderContents()
         }
         .onReceive(manager.$selectedFolder) { _ in
             loadFolderContents()
         }
+        .onReceive(manager.$currentBrowsePath) { _ in
+            loadFolderContents()
+        }
+        .alert("New Folder", isPresented: $showNewFolderAlert) {
+            TextField("Folder name", text: $newFolderName)
+            Button("Cancel", role: .cancel) { }
+            Button("Create") {
+                if !newFolderName.isEmpty {
+                    if manager.createNewFolder(named: newFolderName) {
+                        loadFolderContents()
+                    }
+                }
+            }
+        } message: {
+            Text("Enter a name for the new folder")
+        }
     }
     
     private func loadFolderContents() {
-        guard let path = manager.selectedFolder else {
+        guard let path = manager.currentBrowsePath ?? manager.selectedFolder else {
             allItems = []
             return
         }
@@ -439,12 +580,20 @@ struct MenuFolderBrowserView: View {
 
 struct FolderItemRow: View {
     let item: FolderItem
+    var onFolderTap: ((String) -> Void)?
     @State private var isHovered = false
+    @State private var isHoveringOpen = false
     
     var body: some View {
         HStack(spacing: 0) {
             Button(action: {
-                NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
+                if item.isDirectory {
+                    // Navigate into the folder
+                    onFolderTap?(item.path)
+                } else {
+                    // Open files normally
+                    NSWorkspace.shared.open(URL(fileURLWithPath: item.path))
+                }
             }) {
                 HStack(spacing: 10) {
                     Image(systemName: item.icon)
@@ -458,6 +607,13 @@ struct FolderItemRow: View {
                         .truncationMode(.middle)
                     
                     Spacer()
+                    
+                    // Show chevron for folders to indicate navigation
+                    if item.isDirectory && !isHovered {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary.opacity(0.5))
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -467,6 +623,12 @@ struct FolderItemRow: View {
             // Show app buttons for folders on hover
             if item.isDirectory && isHovered {
                 HStack(spacing: 4) {
+                    // Button to open in Finder
+                    MiniAppButton(icon: "folder", color: .gray) {
+                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: item.path)
+                    }
+                    .help("Open in Finder")
+                    
                     MiniAppButton(icon: "cursorarrow.rays", color: .blue) {
                         FolderPickerManager.shared.openInCursor(path: item.path)
                     }
