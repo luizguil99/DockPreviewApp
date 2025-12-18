@@ -7,6 +7,7 @@ class WindowsModel: ObservableObject {
     @Published var windows: [AppWindow] = []
     @Published var chromeProfiles: [ChromeProfile] = []
     @Published var appName: String = ""
+    @Published var showOnlyProfiles: Bool = false  // Toggle to show only profiles view
 }
 
 struct WindowControlButton: View {
@@ -146,7 +147,96 @@ struct WindowPreviewCard: View {
     }
 }
 
-// Compact Chrome Profile Card
+// Add Profile Button - appears at the end of Chrome windows
+struct AddProfileButton: View {
+    let onTap: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                // Background matching window preview style
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovered ? Color.green.opacity(0.3) : Color.white.opacity(0.1))
+                    .frame(width: 80, height: 100)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isHovered ? Color.green : Color.white.opacity(0.3), lineWidth: isHovered ? 2 : 1)
+                    )
+                
+                // Plus icon
+                VStack(spacing: 4) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(isHovered ? .green : .white.opacity(0.7))
+                    
+                    Text("Profiles")
+                        .font(.system(size: 10))
+                        .foregroundColor(isHovered ? .green : .white.opacity(0.6))
+                }
+            }
+            
+            Text("New Window")
+                .font(.caption)
+                .lineLimit(1)
+                .foregroundColor(isHovered ? .green : .white.opacity(0.7))
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovered ? Color.green.opacity(0.2) : Color.black.opacity(0.3))
+        )
+        .scaleEffect(isHovered ? 1.05 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            onTap()
+        }
+    }
+}
+
+// Back button to return from profiles-only view
+struct BackToWindowsButton: View {
+    let windowCount: Int
+    let onTap: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 10, weight: .semibold))
+            
+            Image(systemName: "macwindow.on.rectangle")
+                .font(.system(size: 11))
+            
+            Text("\(windowCount) window\(windowCount == 1 ? "" : "s")")
+                .font(.system(size: 11))
+        }
+        .foregroundColor(isHovered ? .blue : .white.opacity(0.7))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isHovered ? Color.blue.opacity(0.3) : Color.white.opacity(0.1))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isHovered ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 1)
+        )
+        .scaleEffect(isHovered ? 1.03 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            onTap()
+        }
+    }
+}
+
+// Compact Chrome Profile Card (for bottom bar)
 struct ProfileCard: View {
     let profile: ChromeProfile
     let appName: String
@@ -216,6 +306,77 @@ struct ProfileCard: View {
     }
 }
 
+// Large Chrome Profile Card (for profiles-only view)
+struct ProfileCardLarge: View {
+    let profile: ChromeProfile
+    let appName: String
+    let onSelect: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Profile avatar - larger
+            ZStack(alignment: .bottomTrailing) {
+                if let avatar = profile.avatarImage {
+                    Image(nsImage: avatar)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 56, height: 56)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(isHovered ? Color.green : Color.white.opacity(0.3), lineWidth: 2)
+                        )
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(0.5))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 26))
+                                .foregroundColor(.white.opacity(0.8))
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(isHovered ? Color.green : Color.white.opacity(0.3), lineWidth: 2)
+                        )
+                }
+                
+                // Plus badge
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.green)
+                    .background(Circle().fill(Color.black.opacity(0.9)).frame(width: 14, height: 14))
+                    .offset(x: 4, y: 4)
+            }
+            
+            Text(profile.name)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .foregroundColor(isHovered ? .green : .white)
+        }
+        .frame(width: 90)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isHovered ? Color.green.opacity(0.25) : Color.white.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isHovered ? Color.green.opacity(0.6) : Color.white.opacity(0.15), lineWidth: 1)
+        )
+        .scaleEffect(isHovered ? 1.05 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .onTapGesture {
+            onSelect()
+        }
+    }
+}
+
 struct PreviewOverlay: View {
     @ObservedObject var windowsModel: WindowsModel
     let onSelect: (AppWindow) -> Void
@@ -230,53 +391,129 @@ struct PreviewOverlay: View {
         !windowsModel.chromeProfiles.isEmpty
     }
     
+    var isChromiumBrowser: Bool {
+        ChromeProfileFetcher.isChromiumBrowser(windowsModel.appName)
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Windows section
-            if !windowsModel.windows.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(windowsModel.windows, id: \.id) { window in
-                            WindowPreviewCard(
-                                window: window,
-                                onSelect: { onSelect(window) },
-                                onClose: { onClose(window) },
-                                onMinimize: { onMinimize(window) },
-                                onFullscreen: { onFullscreen(window) },
-                                onKill: { onKill(window) }
-                            )
+            // Check if showing only profiles mode
+            if windowsModel.showOnlyProfiles && hasProfiles {
+                // Profiles-only view
+                VStack(spacing: 10) {
+                    // Header with back button
+                    HStack {
+                        if !windowsModel.windows.isEmpty {
+                            BackToWindowsButton(windowCount: windowsModel.windows.count) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    windowsModel.showOnlyProfiles = false
+                                }
+                            }
                         }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
-                }
-            } else if !hasProfiles {
-                Text("No open windows")
-                    .foregroundColor(.white)
-                    .padding()
-            }
-            
-            // Chrome Profiles section - compact bar
-            if hasProfiles {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        // Label
-                        Image(systemName: "person.badge.plus")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.5))
                         
-                        ForEach(windowsModel.chromeProfiles) { profile in
-                            ProfileCard(
-                                profile: profile,
-                                appName: windowsModel.appName,
-                                onSelect: { onProfileSelect(profile) }
-                            )
+                        Spacer()
+                        
+                        Text("Open New Window")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                        
+                        Spacer()
+                        
+                        // Spacer to balance the back button
+                        if !windowsModel.windows.isEmpty {
+                            Color.clear.frame(width: 100)
                         }
                     }
                     .padding(.horizontal, 12)
+                    .padding(.top, 10)
+                    
+                    // Profiles grid - larger cards for profiles-only view
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(windowsModel.chromeProfiles) { profile in
+                                ProfileCardLarge(
+                                    profile: profile,
+                                    appName: windowsModel.appName,
+                                    onSelect: { onProfileSelect(profile) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                    }
+                    .padding(.bottom, 12)
                 }
-                .padding(.top, windowsModel.windows.isEmpty ? 10 : 0)
-                .padding(.bottom, 8)
+            } else {
+                // Normal view with windows
+                
+                // Windows section
+                if !windowsModel.windows.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(windowsModel.windows, id: \.id) { window in
+                                WindowPreviewCard(
+                                    window: window,
+                                    onSelect: { onSelect(window) },
+                                    onClose: { onClose(window) },
+                                    onMinimize: { onMinimize(window) },
+                                    onFullscreen: { onFullscreen(window) },
+                                    onKill: { onKill(window) }
+                                )
+                            }
+                            
+                            // Add profile button at the end for Chromium browsers
+                            if hasProfiles {
+                                AddProfileButton {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        windowsModel.showOnlyProfiles = true
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                    }
+                } else if !hasProfiles {
+                    Text("No open windows")
+                        .foregroundColor(.white)
+                        .padding()
+                } else {
+                    // No windows but has profiles - show profiles directly
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(windowsModel.chromeProfiles) { profile in
+                                ProfileCardLarge(
+                                    profile: profile,
+                                    appName: windowsModel.appName,
+                                    onSelect: { onProfileSelect(profile) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                    }
+                }
+                
+                // Chrome Profiles section - compact bar (only when windows exist and not in profiles-only mode)
+                if hasProfiles && !windowsModel.windows.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            // Label
+                            Image(systemName: "person.badge.plus")
+                                .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.5))
+                            
+                            ForEach(windowsModel.chromeProfiles) { profile in
+                                ProfileCard(
+                                    profile: profile,
+                                    appName: windowsModel.appName,
+                                    onSelect: { onProfileSelect(profile) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                    }
+                    .padding(.bottom, 8)
+                }
             }
         }
         .frame(maxWidth: maxWidth)
@@ -426,6 +663,7 @@ class OverlayWindowManager: ObservableObject {
             windowsModel.windows = []
             windowsModel.chromeProfiles = []
             windowsModel.appName = ""
+            windowsModel.showOnlyProfiles = false  // Reset profiles-only mode
             lastAppName = ""
             return
         }
@@ -441,6 +679,7 @@ class OverlayWindowManager: ObservableObject {
             hostingView = nil
             windowsModel.windows = []
             windowsModel.chromeProfiles = []
+            windowsModel.showOnlyProfiles = false  // Reset profiles-only mode on app change
             lastAppName = icon.title
         }
         
