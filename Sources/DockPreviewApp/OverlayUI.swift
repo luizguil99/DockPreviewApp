@@ -140,32 +140,34 @@ struct WindowPreviewCard: View {
     }
 }
 
-// Kill Process Button - small icon button
+// Kill Process Button - styled action button
 struct KillProcessButton: View {
     let onTap: () -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(isHovered ? Color.red.opacity(0.3) : Color.white.opacity(0.1))
-                .frame(width: 24, height: 24)
-                .overlay(
-                    Circle()
-                        .stroke(isHovered ? Color.red : Color.white.opacity(0.3), lineWidth: 1)
-                )
-            
-            Image(systemName: "power")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(isHovered ? .red : .white.opacity(0.6))
+        Button(action: onTap) {
+            VStack(spacing: 4) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isHovered ? Color.red.opacity(0.2) : Color.white.opacity(0.08))
+                        .frame(width: 36, height: 36)
+                    
+                    Image(systemName: "power")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(isHovered ? .red : .white.opacity(0.6))
+                }
+                
+                Text("Kill")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(isHovered ? .red : .white.opacity(0.5))
+            }
         }
-        .scaleEffect(isHovered ? 1.1 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .buttonStyle(.plain)
+        .scaleEffect(isHovered ? 1.08 : 1.0)
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
-        }
-        .onTapGesture {
-            onTap()
         }
     }
 }
