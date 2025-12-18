@@ -453,23 +453,12 @@ struct MenuFolderBrowserView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             
-            // App buttons row
-            if manager.selectedFolder != nil {
-                HStack(spacing: 6) {
-                    AppButton(icon: "cursorarrow.rays", label: "Cursor", color: .blue) {
-                        manager.openInCursor(path: manager.currentBrowsePath)
-                    }
-                    AppButton(icon: "chevron.left.forwardslash.chevron.right", label: "VSCode", color: .cyan) {
-                        manager.openInVSCode(path: manager.currentBrowsePath)
-                    }
-                    AppButton(icon: "text.cursor", label: "Zed", color: .orange) {
-                        manager.openInZed(path: manager.currentBrowsePath)
-                    }
-                    AppButton(icon: "terminal", label: "Warp", color: .pink) {
-                        manager.openInWarp(path: manager.currentBrowsePath)
-                    }
+            // App buttons row (dynamic from CustomAppManager)
+            if manager.selectedFolder != nil, let currentPath = manager.currentBrowsePath {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    DynamicAppButtonsRow(path: currentPath)
+                        .padding(.horizontal, 12)
                 }
-                .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             }
             
@@ -651,29 +640,10 @@ struct FolderItemRow: View {
             }
             .buttonStyle(.plain)
             
-            // Show app buttons for folders on hover
+            // Show app buttons for folders on hover (dynamic from CustomAppManager)
             if item.isDirectory && isHovered {
-                HStack(spacing: 4) {
-                    // Button to open in Finder
-                    MiniAppButton(icon: "folder", color: .gray) {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: item.path)
-                    }
-                    .help("Open in Finder")
-                    
-                    MiniAppButton(icon: "cursorarrow.rays", color: .blue) {
-                        FolderPickerManager.shared.openInCursor(path: item.path)
-                    }
-                    MiniAppButton(icon: "chevron.left.forwardslash.chevron.right", color: .cyan) {
-                        FolderPickerManager.shared.openInVSCode(path: item.path)
-                    }
-                    MiniAppButton(icon: "text.cursor", color: .orange) {
-                        FolderPickerManager.shared.openInZed(path: item.path)
-                    }
-                    MiniAppButton(icon: "terminal", color: .pink) {
-                        FolderPickerManager.shared.openInWarp(path: item.path)
-                    }
-                }
-                .padding(.trailing, 8)
+                DynamicMiniAppButtons(path: item.path, includeFinder: true)
+                    .padding(.trailing, 8)
             }
         }
         .background(isHovered ? Color.primary.opacity(0.1) : Color.clear)

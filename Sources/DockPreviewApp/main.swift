@@ -73,6 +73,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Open With Settings
+        let openWithItem = NSMenuItem(title: "Configure Open With...", action: #selector(openAppSettings), keyEquivalent: ",")
+        openWithItem.target = self
+        if let icon = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Open With Settings") {
+            icon.isTemplate = true
+            openWithItem.image = icon
+        }
+        menu.addItem(openWithItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         // Permissions section header
         let permissionsHeader = NSMenuItem(title: "Permissions", action: nil, keyEquivalent: "")
         permissionsHeader.isEnabled = false
@@ -106,6 +117,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.menu = menu
         
         print("Menu bar setup complete")
+    }
+    
+    var settingsWindow: NSWindow?
+    
+    @objc func openAppSettings() {
+        // If window already exists, just bring it to front
+        if let existingWindow = settingsWindow, existingWindow.isVisible {
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        let settingsView = CustomAppSettingsView()
+        let hostingController = NSHostingController(rootView: settingsView)
+        
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Open With Settings"
+        window.styleMask = [.titled, .closable]
+        window.setContentSize(NSSize(width: 320, height: 400))
+        window.center()
+        window.isReleasedWhenClosed = false
+        
+        // Handle window close to return to accessory mode
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                NSApp.setActivationPolicy(.accessory)
+                self?.settingsWindow = nil
+            }
+        }
+        
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
     }
     
     @objc func openAccessibilitySettings() {
