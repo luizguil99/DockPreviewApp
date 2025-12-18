@@ -99,56 +99,142 @@ class FolderPickerManager: ObservableObject {
     }
     
     func openInCursor(path: String? = nil) {
+        openWithApp(path: path, appName: "Cursor", cliCommand: "cursor")
+    }
+    
+    func openInVSCode(path: String? = nil) {
+        openWithApp(path: path, appName: "Visual Studio Code", cliCommand: "code")
+    }
+    
+    func openInZed(path: String? = nil) {
+        openWithApp(path: path, appName: "Zed", cliCommand: "zed")
+    }
+    
+    func openInWarp(path: String? = nil) {
         let targetPath = path ?? selectedFolder
         guard let folderPath = targetPath else { return }
         
-        // Try to open with Cursor
-        let cursorURLs = [
-            "/Applications/Cursor.app",
-            NSHomeDirectory() + "/Applications/Cursor.app"
+        // Warp needs special handling - open terminal at directory
+        let warpPaths = [
+            "/Applications/Warp.app",
+            NSHomeDirectory() + "/Applications/Warp.app"
         ]
         
-        var cursorURL: URL?
-        for path in cursorURLs {
-            let url = URL(fileURLWithPath: path)
-            if FileManager.default.fileExists(atPath: path) {
-                cursorURL = url
+        for warpPath in warpPaths {
+            if FileManager.default.fileExists(atPath: warpPath) {
+                let warpURL = URL(fileURLWithPath: warpPath)
+                let configuration = NSWorkspace.OpenConfiguration()
+                
+                // Create a script to cd to directory
+                let script = """
+                tell application "Warp"
+                    activate
+                    tell application "System Events"
+                        keystroke "cd \(folderPath)" & return
+                    end tell
+                end tell
+                """
+                
+                NSWorkspace.shared.open(warpURL)
+                
+                // Run AppleScript after a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.runAppleScript(script)
+                }
+                return
+            }
+        }
+        
+        // Fallback: try CLI
+        openWithCLI(cliCommand: "warp", path: folderPath)
+    }
+    
+    private func openWithApp(path: String?, appName: String, cliCommand: String) {
+        let targetPath = path ?? selectedFolder
+        guard let folderPath = targetPath else { return }
+        
+        let appPaths = [
+            "/Applications/\(appName).app",
+            NSHomeDirectory() + "/Applications/\(appName).app"
+        ]
+        
+        var appURL: URL?
+        for appPath in appPaths {
+            if FileManager.default.fileExists(atPath: appPath) {
+                appURL = URL(fileURLWithPath: appPath)
                 break
             }
         }
         
-        if let cursorURL = cursorURL {
+        if let appURL = appURL {
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.arguments = [folderPath]
             
             NSWorkspace.shared.open(
                 [URL(fileURLWithPath: folderPath)],
-                withApplicationAt: cursorURL,
+                withApplicationAt: appURL,
                 configuration: configuration
             ) { _, error in
                 if let error = error {
-                    print("Error opening with Cursor: \(error)")
-                    // Fallback: try using open command
-                    self.openWithCursorCLI(path: folderPath)
+                    print("Error opening with \(appName): \(error)")
+                    self.openWithCLI(cliCommand: cliCommand, path: folderPath)
                 }
             }
         } else {
-            // Try CLI
-            openWithCursorCLI(path: folderPath)
+            openWithCLI(cliCommand: cliCommand, path: folderPath)
         }
     }
     
-    private func openWithCursorCLI(path: String) {
+    private func openWithCLI(cliCommand: String, path: String) {
         let task = Process()
         task.launchPath = "/usr/bin/env"
-        task.arguments = ["cursor", path]
+        task.arguments = [cliCommand, path]
         
         do {
             try task.run()
         } catch {
-            print("Error opening with cursor CLI: \(error)")
-            // Last resort: open in Finder
+            print("Error opening with \(cliCommand) CLI: \(error)")
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+        }
+    }
+    
+    private func runAppleScript(_ script: String) {
+        var error: NSDictionary?
+        if let scriptObject = NSAppleScript(source: script) {
+            scriptObject.executeAndReturnError(&error)
+            if let error = error {
+                print("AppleScript error: \(error)")
+            }
+        }
+    }
+}
+
+// MARK: - App Button Component
+
+struct AppButton: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                Text(label)
+                    .font(.system(size: 9))
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(isHovered ? color.opacity(0.25) : color.opacity(0.12))
+            .foregroundColor(color)
+            .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }
@@ -158,8 +244,9 @@ class FolderPickerManager: ObservableObject {
 struct MenuFolderBrowserView: View {
     @ObservedObject var manager = FolderPickerManager.shared
     @State private var items: [FolderItem] = []
+    @State private var allItems: [FolderItem] = []
+    @State private var searchText: String = ""
     @State private var isHoveringHeader = false
-    @State private var isHoveringCursor = false
     
     var folderName: String {
         if let path = manager.selectedFolder {
@@ -168,66 +255,97 @@ struct MenuFolderBrowserView: View {
         return "Select Folder"
     }
     
+    var filteredItems: [FolderItem] {
+        if searchText.isEmpty {
+            return allItems
+        }
+        return allItems.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header with folder name
-            HStack(spacing: 0) {
-                Button(action: { manager.selectFolder() }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder.fill")
-                            .foregroundColor(.blue)
-                            .font(.system(size: 14))
-                        
-                        Text(folderName)
-                            .font(.system(size: 13, weight: .medium))
-                            .lineLimit(1)
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(isHoveringHeader ? Color.primary.opacity(0.1) : Color.clear)
-                    .cornerRadius(6)
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    isHoveringHeader = hovering
-                }
-                
-                Spacer()
-                
-                // Open in Cursor button
-                if manager.selectedFolder != nil {
-                    Button(action: { manager.openInCursor() }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "cursorarrow.rays")
-                                .font(.system(size: 11))
-                            Text("Cursor")
-                                .font(.system(size: 11))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(isHoveringCursor ? Color.blue.opacity(0.2) : Color.blue.opacity(0.1))
+            Button(action: { manager.selectFolder() }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill")
                         .foregroundColor(.blue)
-                        .cornerRadius(4)
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { hovering in
-                        isHoveringCursor = hovering
-                    }
-                    .padding(.trailing, 8)
+                        .font(.system(size: 14))
+                    
+                    Text(folderName)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(isHoveringHeader ? Color.primary.opacity(0.1) : Color.clear)
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                isHoveringHeader = hovering
+            }
+            
+            // App buttons row
+            if manager.selectedFolder != nil {
+                HStack(spacing: 6) {
+                    AppButton(icon: "cursorarrow.rays", label: "Cursor", color: .blue) {
+                        manager.openInCursor()
+                    }
+                    AppButton(icon: "chevron.left.forwardslash.chevron.right", label: "VSCode", color: .cyan) {
+                        manager.openInVSCode()
+                    }
+                    AppButton(icon: "text.cursor", label: "Zed", color: .orange) {
+                        manager.openInZed()
+                    }
+                    AppButton(icon: "terminal", label: "Warp", color: .pink) {
+                        manager.openInWarp()
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
             
             Divider()
                 .padding(.horizontal, 8)
             
+            // Search field
+            if manager.selectedFolder != nil {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 12))
+                    
+                    TextField("Search files...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                    
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 12))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.05))
+                .cornerRadius(6)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            
             // Folder contents
             if manager.selectedFolder != nil {
-                if items.isEmpty {
-                    Text("Empty folder")
+                if filteredItems.isEmpty {
+                    Text(searchText.isEmpty ? "Empty folder" : "No results for \"\(searchText)\"")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 12)
@@ -236,13 +354,13 @@ struct MenuFolderBrowserView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(items) { item in
+                            ForEach(filteredItems) { item in
                                 FolderItemRow(item: item)
                             }
                         }
                         .padding(.vertical, 6)
                     }
-                    .frame(maxHeight: 300)
+                    .frame(maxHeight: 250)
                 }
             } else {
                 Text("Click to select a folder")
@@ -264,7 +382,7 @@ struct MenuFolderBrowserView: View {
     
     private func loadFolderContents() {
         guard let path = manager.selectedFolder else {
-            items = []
+            allItems = []
             return
         }
         
@@ -274,7 +392,7 @@ struct MenuFolderBrowserView: View {
         do {
             let contents = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
             
-            items = contents.compactMap { itemURL in
+            allItems = contents.compactMap { itemURL in
                 let isDir = (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
                 let icon = isDir ? "folder.fill" : fileIcon(for: itemURL.pathExtension)
                 
@@ -292,7 +410,7 @@ struct MenuFolderBrowserView: View {
             }
         } catch {
             print("Error loading folder contents: \(error)")
-            items = []
+            allItems = []
         }
     }
     
@@ -322,7 +440,6 @@ struct MenuFolderBrowserView: View {
 struct FolderItemRow: View {
     let item: FolderItem
     @State private var isHovered = false
-    @State private var isHoveringCursor = false
     
     var body: some View {
         HStack(spacing: 0) {
@@ -347,24 +464,49 @@ struct FolderItemRow: View {
             }
             .buttonStyle(.plain)
             
-            // Show Cursor button for folders on hover
+            // Show app buttons for folders on hover
             if item.isDirectory && isHovered {
-                Button(action: {
-                    FolderPickerManager.shared.openInCursor(path: item.path)
-                }) {
-                    Image(systemName: "cursorarrow.rays")
-                        .font(.system(size: 10))
-                        .foregroundColor(isHoveringCursor ? .blue : .secondary)
+                HStack(spacing: 4) {
+                    MiniAppButton(icon: "cursorarrow.rays", color: .blue) {
+                        FolderPickerManager.shared.openInCursor(path: item.path)
+                    }
+                    MiniAppButton(icon: "chevron.left.forwardslash.chevron.right", color: .cyan) {
+                        FolderPickerManager.shared.openInVSCode(path: item.path)
+                    }
+                    MiniAppButton(icon: "text.cursor", color: .orange) {
+                        FolderPickerManager.shared.openInZed(path: item.path)
+                    }
+                    MiniAppButton(icon: "terminal", color: .pink) {
+                        FolderPickerManager.shared.openInWarp(path: item.path)
+                    }
                 }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    isHoveringCursor = hovering
-                }
-                .padding(.trailing, 12)
+                .padding(.trailing, 8)
             }
         }
         .background(isHovered ? Color.primary.opacity(0.1) : Color.clear)
         .cornerRadius(4)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+// MARK: - Mini App Button
+
+struct MiniAppButton: View {
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 9))
+                .foregroundColor(isHovered ? color : .secondary)
+                .frame(width: 16, height: 16)
+        }
+        .buttonStyle(.plain)
         .onHover { hovering in
             isHovered = hovering
         }
