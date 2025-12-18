@@ -445,6 +445,11 @@ struct WindowsPreviewOverlay: View {
                             SpotifyMiniPlayerCard()
                         }
                         
+                        // Cursor quick actions
+                        if CursorController.isCursor(windowsModel.appName) {
+                            CursorQuickActionsCard()
+                        }
+                        
                         // Kill process button (centered vertically)
                         VStack {
                             Spacer()
