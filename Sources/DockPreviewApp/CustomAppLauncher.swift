@@ -176,16 +176,10 @@ struct PresetApps {
         icon: "terminal",
         color: "pink",
         appPath: "/Applications/Warp.app",
-        usesAppleScript: true,
-        appleScript: """
-        tell application "Warp"
-            activate
-        end tell
-        delay 0.3
-        tell application "System Events"
-            keystroke "cd \\"{path}\\"" & return
-        end tell
-        """
+        cliCommand: nil,
+        isEnabled: true,
+        usesAppleScript: false,
+        appleScript: nil
     )
     
     static let finder = CustomApp(
@@ -300,6 +294,25 @@ class CustomAppManager: ObservableObject {
     func openWithApp(_ app: CustomApp, path: String) {
         if app.name == "Finder" {
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+            return
+        }
+        
+        // Special handling for Warp using URL scheme
+        if app.name == "Warp" {
+            print("🔵 Warp - Original path: \(path)")
+            if let encodedPath = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) {
+                print("🔵 Warp - Encoded path: \(encodedPath)")
+                let urlString = "warp://action/new_tab?path=\(encodedPath)"
+                print("🔵 Warp - URL string: \(urlString)")
+                if let warpURL = URL(string: urlString) {
+                    NSWorkspace.shared.open(warpURL)
+                    print("✅ Opening Warp with URL")
+                } else {
+                    print("❌ Failed to create URL from string: \(urlString)")
+                }
+            } else {
+                print("❌ Failed to encode path: \(path)")
+            }
             return
         }
         
