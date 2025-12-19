@@ -23,6 +23,32 @@ struct MenuToggleView: View {
     }
 }
 
+// MARK: - Toggle with ObservedObject for DockMonitor
+
+struct DockMonitorToggleView: View {
+    let title: String
+    let keyPath: ReferenceWritableKeyPath<DockMonitor, Bool>
+    @ObservedObject var monitor = DockMonitor.shared
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 14))
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { monitor[keyPath: keyPath] },
+                set: { monitor[keyPath: keyPath] = $0 }
+            ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .scaleEffect(0.85)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .frame(width: 320)
+    }
+}
+
 // MARK: - Folder Item Model
 
 struct FolderItem: Identifiable {

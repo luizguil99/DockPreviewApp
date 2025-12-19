@@ -147,12 +147,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
         
         // Click to Hide toggle
-        let toggleView = MenuToggleView(
+        let toggleView = DockMonitorToggleView(
             title: "Click to Hide",
-            isOn: Binding(
-                get: { DockMonitor.shared.clickToHideEnabled },
-                set: { DockMonitor.shared.clickToHideEnabled = $0 }
-            )
+            keyPath: \.clickToHideEnabled
         )
         let hostingView = NSHostingView(rootView: toggleView)
         hostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
@@ -162,12 +159,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(toggleItem)
         
         // Chrome Profiles toggle
-        let chromeToggleView = MenuToggleView(
+        let chromeToggleView = DockMonitorToggleView(
             title: "Chrome Profiles",
-            isOn: Binding(
-                get: { DockMonitor.shared.chromeProfilesEnabled },
-                set: { DockMonitor.shared.chromeProfilesEnabled = $0 }
-            )
+            keyPath: \.chromeProfilesEnabled
         )
         let chromeHostingView = NSHostingView(rootView: chromeToggleView)
         chromeHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
@@ -175,6 +169,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let chromeToggleItem = NSMenuItem()
         chromeToggleItem.view = chromeHostingView
         menu.addItem(chromeToggleItem)
+        
+        // Cursor Overlay toggle
+        let cursorToggleView = DockMonitorToggleView(
+            title: "Cursor Overlay",
+            keyPath: \.cursorOverlayEnabled
+        )
+        let cursorHostingView = NSHostingView(rootView: cursorToggleView)
+        cursorHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
+        
+        let cursorToggleItem = NSMenuItem()
+        cursorToggleItem.view = cursorHostingView
+        menu.addItem(cursorToggleItem)
+        
+        // Compact Overlay Mode toggle
+        let compactToggleView = DockMonitorToggleView(
+            title: "Compact Overlay",
+            keyPath: \.compactOverlayMode
+        )
+        let compactHostingView = NSHostingView(rootView: compactToggleView)
+        compactHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
+        
+        let compactToggleItem = NSMenuItem()
+        compactToggleItem.view = compactHostingView
+        menu.addItem(compactToggleItem)
+        
+        // Show Kill Button toggle
+        let killButtonToggleView = DockMonitorToggleView(
+            title: "Show Kill Button",
+            keyPath: \.showKillButton
+        )
+        let killButtonHostingView = NSHostingView(rootView: killButtonToggleView)
+        killButtonHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
+        
+        let killButtonToggleItem = NSMenuItem()
+        killButtonToggleItem.view = killButtonHostingView
+        menu.addItem(killButtonToggleItem)
         
         menu.addItem(NSMenuItem.separator())
         

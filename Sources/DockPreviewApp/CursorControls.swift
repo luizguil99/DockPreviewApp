@@ -483,6 +483,22 @@ struct CursorQuickActionsCard: View {
     
     let cursorBlue = Color(red: 0.4, green: 0.6, blue: 1.0)
     
+    private var buttonSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 32 : 40
+    }
+    
+    private var iconSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 13 : 16
+    }
+    
+    private var labelSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 8 : 9
+    }
+    
+    private var headerIconSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 12 : 14
+    }
+    
     // Get Cursor app icon
     private var cursorIcon: NSImage? {
         let appPaths = [
@@ -507,26 +523,26 @@ struct CursorQuickActionsCard: View {
     }
     
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DockMonitor.shared.compactOverlayMode ? 6 : 8) {
             // Header with app icon
             HStack(spacing: 5) {
                 if let icon = cursorIcon {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 14, height: 14)
+                        .frame(width: headerIconSize, height: headerIconSize)
                 } else {
                     Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: DockMonitor.shared.compactOverlayMode ? 9 : 10, weight: .semibold))
                         .foregroundColor(cursorBlue)
                 }
                 Text("Cursor")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: DockMonitor.shared.compactOverlayMode ? 9 : 10, weight: .semibold))
                     .foregroundColor(.white.opacity(0.8))
             }
             
             // Action buttons
-            HStack(spacing: 8) {
+            HStack(spacing: DockMonitor.shared.compactOverlayMode ? 6 : 8) {
                 // Ask AI button (opens floating input)
                 actionButton(
                     icon: "sparkles",
@@ -555,8 +571,8 @@ struct CursorQuickActionsCard: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DockMonitor.shared.compactOverlayMode ? 10 : 12)
+        .padding(.vertical, DockMonitor.shared.compactOverlayMode ? 8 : 10)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.black.opacity(0.6))
@@ -576,15 +592,15 @@ struct CursorQuickActionsCard: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(hoveredButton == id ? cursorBlue.opacity(0.3) : Color.white.opacity(0.08))
-                        .frame(width: 40, height: 40)
+                        .frame(width: buttonSize, height: buttonSize)
                     
                     Image(systemName: icon)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: iconSize, weight: .medium))
                         .foregroundColor(hoveredButton == id ? cursorBlue : .white.opacity(0.7))
                 }
                 
                 Text(label)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: labelSize, weight: .medium))
                     .foregroundColor(hoveredButton == id ? cursorBlue : .white.opacity(0.5))
             }
         }

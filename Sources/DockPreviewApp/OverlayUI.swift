@@ -45,6 +45,19 @@ struct WindowPreviewCard: View {
     let onFullscreen: () -> Void
     @State private var isHovered = false
     
+    // Compact mode sizes
+    private var cardWidth: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 120 : 160
+    }
+    
+    private var cardHeight: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 75 : 100
+    }
+    
+    private var fontSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 10 : 11
+    }
+    
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
@@ -53,7 +66,7 @@ struct WindowPreviewCard: View {
                     Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 160, height: 100)
+                        .frame(width: cardWidth, height: cardHeight)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -65,7 +78,7 @@ struct WindowPreviewCard: View {
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.5))
-                        .frame(width: 160, height: 100)
+                        .frame(width: cardWidth, height: cardHeight)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -91,7 +104,7 @@ struct WindowPreviewCard: View {
                         .padding(6)
                         Spacer()
                     }
-                    .frame(width: 160, height: 100)
+                    .frame(width: cardWidth, height: cardHeight)
                 }
                 
                 // Minimized badge (top-right)
@@ -107,7 +120,7 @@ struct WindowPreviewCard: View {
                         }
                         Spacer()
                     }
-                    .frame(width: 160, height: 100)
+                    .frame(width: cardWidth, height: cardHeight)
                 }
             }
             
@@ -118,11 +131,11 @@ struct WindowPreviewCard: View {
                         .foregroundColor(.yellow)
                 }
                 Text(window.title)
-                    .font(.caption)
+                    .font(.system(size: fontSize))
                     .lineLimit(1)
                     .foregroundColor(window.isMinimized ? .yellow : .white)
             }
-            .frame(width: 160)
+            .frame(width: cardWidth)
         }
         .padding(8)
         .background(
@@ -144,6 +157,18 @@ struct WindowPreviewCard: View {
 struct KillProcessButton: View {
     let onTap: () -> Void
     @State private var isHovered = false
+    
+    private var buttonSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 30 : 36
+    }
+    
+    private var iconSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 12 : 14
+    }
+    
+    private var fontSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 8 : 9
+    }
 
     var body: some View {
         Button(action: onTap) {
@@ -151,15 +176,15 @@ struct KillProcessButton: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(isHovered ? Color.red.opacity(0.2) : Color.white.opacity(0.08))
-                        .frame(width: 36, height: 36)
+                        .frame(width: buttonSize, height: buttonSize)
                     
                     Image(systemName: "power")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: iconSize, weight: .medium))
                         .foregroundColor(isHovered ? .red : .white.opacity(0.6))
                 }
                 
                 Text("Kill")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: fontSize, weight: .medium))
                     .foregroundColor(isHovered ? .red : .white.opacity(0.5))
             }
         }
@@ -178,13 +203,29 @@ struct AddProfileButton: View {
     let onTap: () -> Void
     @State private var isHovered = false
     
+    private var buttonWidth: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 60 : 80
+    }
+    
+    private var buttonHeight: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 75 : 100
+    }
+    
+    private var iconSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 22 : 28
+    }
+    
+    private var fontSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 9 : 10
+    }
+    
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
                 // Background matching window preview style
                 RoundedRectangle(cornerRadius: 8)
                     .fill(isHovered ? Color.green.opacity(0.3) : Color.white.opacity(0.1))
-                    .frame(width: 80, height: 100)
+                    .frame(width: buttonWidth, height: buttonHeight)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(isHovered ? Color.green : Color.white.opacity(0.3), lineWidth: isHovered ? 2 : 1)
@@ -193,17 +234,17 @@ struct AddProfileButton: View {
                 // Plus icon
                 VStack(spacing: 4) {
                     Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.system(size: 28, weight: .light))
+                        .font(.system(size: iconSize, weight: .light))
                         .foregroundColor(isHovered ? .green : .white.opacity(0.7))
                     
                     Text("Profiles")
-                        .font(.system(size: 10))
+                        .font(.system(size: fontSize))
                         .foregroundColor(isHovered ? .green : .white.opacity(0.6))
                 }
             }
             
             Text("New Window")
-                .font(.caption)
+                .font(.system(size: fontSize))
                 .lineLimit(1)
                 .foregroundColor(isHovered ? .green : .white.opacity(0.7))
         }
@@ -446,19 +487,21 @@ struct WindowsPreviewOverlay: View {
                         }
                         
                         // Cursor quick actions
-                        if CursorController.isCursor(windowsModel.appName) {
+                        if CursorController.isCursor(windowsModel.appName) && DockMonitor.shared.cursorOverlayEnabled {
                             CursorQuickActionsCard()
                         }
                         
-                        // Kill process button (centered vertically)
-                        VStack {
-                            Spacer()
-                            KillProcessButton {
-                                if let firstWindow = windowsModel.windows.first {
-                                    onKill(firstWindow)
+                        // Kill process button (centered vertically) - only if enabled
+                        if DockMonitor.shared.showKillButton {
+                            VStack {
+                                Spacer()
+                                KillProcessButton {
+                                    if let firstWindow = windowsModel.windows.first {
+                                        onKill(firstWindow)
+                                    }
                                 }
+                                Spacer()
                             }
-                            Spacer()
                         }
                     }
                     .padding(.horizontal, 12)

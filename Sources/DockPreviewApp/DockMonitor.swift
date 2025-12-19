@@ -25,6 +25,21 @@ class DockMonitor: ObservableObject {
             UserDefaults.standard.set(chromeProfilesEnabled, forKey: "chromeProfilesEnabled")
         }
     }
+    @Published var cursorOverlayEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(cursorOverlayEnabled, forKey: "cursorOverlayEnabled")
+        }
+    }
+    @Published var compactOverlayMode: Bool = true {
+        didSet {
+            UserDefaults.standard.set(compactOverlayMode, forKey: "compactOverlayMode")
+        }
+    }
+    @Published var showKillButton: Bool = false {
+        didSet {
+            UserDefaults.standard.set(showKillButton, forKey: "showKillButton")
+        }
+    }
     
     private var icons: [DockIcon] = []
     private var timer: Timer?
@@ -37,6 +52,9 @@ class DockMonitor: ObservableObject {
         // Load saved preferences
         clickToHideEnabled = UserDefaults.standard.object(forKey: "clickToHideEnabled") as? Bool ?? true
         chromeProfilesEnabled = UserDefaults.standard.object(forKey: "chromeProfilesEnabled") as? Bool ?? true
+        cursorOverlayEnabled = UserDefaults.standard.object(forKey: "cursorOverlayEnabled") as? Bool ?? true
+        compactOverlayMode = UserDefaults.standard.object(forKey: "compactOverlayMode") as? Bool ?? true
+        showKillButton = UserDefaults.standard.object(forKey: "showKillButton") as? Bool ?? false
         
         startMonitoring()
         setupEventTap()

@@ -79,6 +79,18 @@ struct SpotifyMiniPlayerCard: View {
     
     let spotifyGreen = Color(red: 0.12, green: 0.84, blue: 0.38)
     
+    private var cardWidth: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 180 : 220
+    }
+    
+    private var artSize: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 55 : 70
+    }
+    
+    private var infoWidth: CGFloat {
+        DockMonitor.shared.compactOverlayMode ? 100 : 120
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Main card content
@@ -87,17 +99,17 @@ struct SpotifyMiniPlayerCard: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Color.black.opacity(0.5))
-                        .frame(width: 70, height: 70)
+                        .frame(width: artSize, height: artSize)
                     
                     if let art = state.albumArt {
                         Image(nsImage: art)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 70, height: 70)
+                            .frame(width: artSize, height: artSize)
                             .cornerRadius(6)
                     } else {
                         Image(systemName: "music.note")
-                            .font(.system(size: 24))
+                            .font(.system(size: DockMonitor.shared.compactOverlayMode ? 20 : 24))
                             .foregroundColor(.white.opacity(0.5))
                     }
                 }
@@ -106,13 +118,13 @@ struct SpotifyMiniPlayerCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     // Track name
                     Text(state.trackName.isEmpty ? "Not Playing" : state.trackName)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: DockMonitor.shared.compactOverlayMode ? 11 : 12, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                     
                     // Artist name
                     Text(state.artistName.isEmpty ? "Spotify" : state.artistName)
-                        .font(.system(size: 10))
+                        .font(.system(size: DockMonitor.shared.compactOverlayMode ? 9 : 10))
                         .foregroundColor(.white.opacity(0.6))
                         .lineLimit(1)
                     
@@ -135,39 +147,39 @@ struct SpotifyMiniPlayerCard: View {
                     // Time labels
                     HStack {
                         Text(formatTime(state.position))
-                            .font(.system(size: 9))
+                            .font(.system(size: DockMonitor.shared.compactOverlayMode ? 8 : 9))
                             .foregroundColor(.white.opacity(0.5))
                         Spacer()
                         Text("-\(formatTime(state.duration - state.position))")
-                            .font(.system(size: 9))
+                            .font(.system(size: DockMonitor.shared.compactOverlayMode ? 8 : 9))
                             .foregroundColor(.white.opacity(0.5))
                     }
                 }
-                .frame(width: 120)
+                .frame(width: infoWidth)
             }
-            .padding(10)
+            .padding(DockMonitor.shared.compactOverlayMode ? 8 : 10)
             
             // Playback controls
-            HStack(spacing: 20) {
+            HStack(spacing: DockMonitor.shared.compactOverlayMode ? 15 : 20) {
                 // Previous
-                controlButton(icon: "backward.fill", id: "prev", size: 14) {
+                controlButton(icon: "backward.fill", id: "prev", size: DockMonitor.shared.compactOverlayMode ? 12 : 14) {
                     SpotifyController.previous()
                     refreshAfterDelay()
                 }
                 
                 // Play/Pause
-                controlButton(icon: state.isPlaying ? "pause.fill" : "play.fill", id: "play", size: 20) {
+                controlButton(icon: state.isPlaying ? "pause.fill" : "play.fill", id: "play", size: DockMonitor.shared.compactOverlayMode ? 16 : 20) {
                     SpotifyController.playPause()
                     state.isPlaying.toggle()
                 }
                 
                 // Next
-                controlButton(icon: "forward.fill", id: "next", size: 14) {
+                controlButton(icon: "forward.fill", id: "next", size: DockMonitor.shared.compactOverlayMode ? 12 : 14) {
                     SpotifyController.next()
                     refreshAfterDelay()
                 }
                 
-                Spacer().frame(width: 10)
+                Spacer().frame(width: DockMonitor.shared.compactOverlayMode ? 8 : 10)
                 
                 // Like
                 Button(action: {
@@ -175,7 +187,7 @@ struct SpotifyMiniPlayerCard: View {
                     SpotifyController.toggleLike()
                 }) {
                     Image(systemName: state.isLiked ? "heart.fill" : "heart")
-                        .font(.system(size: 14))
+                        .font(.system(size: DockMonitor.shared.compactOverlayMode ? 12 : 14))
                         .foregroundColor(state.isLiked ? spotifyGreen : (hoveredButton == "like" ? spotifyGreen : .white.opacity(0.7)))
                 }
                 .buttonStyle(.plain)
@@ -183,10 +195,10 @@ struct SpotifyMiniPlayerCard: View {
                 .animation(.easeInOut(duration: 0.1), value: hoveredButton)
                 .onHover { h in hoveredButton = h ? "like" : nil }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.horizontal, DockMonitor.shared.compactOverlayMode ? 12 : 16)
+            .padding(.bottom, DockMonitor.shared.compactOverlayMode ? 8 : 10)
         }
-        .frame(width: 220)
+        .frame(width: cardWidth)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.black.opacity(0.7))
