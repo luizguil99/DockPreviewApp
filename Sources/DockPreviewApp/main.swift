@@ -46,22 +46,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return event
         }
         
-        print("Global hotkey setup: ⌃⌥D to open menu")
+        print("Global hotkeys setup:")
+        print("  ⌃⌥D - Open menu")
+        print("  ⌃⌥L - Toggle Cursor chat input")
     }
     
     @discardableResult
     private func handleHotkey(_ event: NSEvent) -> Bool {
-        // Check for ⌃⌥D (Control + Option + D)
+        // Check for modifier keys
         let controlPressed = event.modifierFlags.contains(.control)
         let optionPressed = event.modifierFlags.contains(.option)
         let isDKey = event.keyCode == 2 // D key
+        let isLKey = event.keyCode == 37 // L key
         
+        // ⌃⌥D - Open menu bar menu
         if controlPressed && optionPressed && isDKey {
             DispatchQueue.main.async {
                 self.openMenuBarMenu()
             }
             return true
         }
+        
+        // ⌃⌥L - Toggle Cursor Chat Input
+        if controlPressed && optionPressed && isLKey {
+            DispatchQueue.main.async {
+                self.toggleCursorChatInput()
+            }
+            return true
+        }
+        
         return false
     }
     
@@ -76,6 +89,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // Position the menu below the status item button
             let buttonFrame = button.window?.convertToScreen(button.frame) ?? .zero
             menu.popUp(positioning: nil, at: NSPoint(x: buttonFrame.origin.x, y: buttonFrame.origin.y), in: nil)
+        }
+    }
+    
+    func toggleCursorChatInput() {
+        // Check if window is already open
+        if let window = CursorController.chatWindow, window.isVisible {
+            // Close the window
+            window.close()
+            CursorController.chatWindow = nil
+        } else {
+            // Open the window
+            CursorController.openChatInput()
         }
     }
     
@@ -153,6 +178,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Ask Cursor AI
+        let askCursorItem = NSMenuItem(title: "Ask Cursor AI", action: #selector(toggleCursorChat), keyEquivalent: "l")
+        askCursorItem.keyEquivalentModifierMask = [.control, .option]
+        askCursorItem.target = self
+        if let icon = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Ask Cursor AI") {
+            icon.isTemplate = true
+            askCursorItem.image = icon
+        }
+        menu.addItem(askCursorItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         // Open With Settings
         let openWithItem = NSMenuItem(title: "Configure Open With...", action: #selector(openAppSettings), keyEquivalent: ",")
         openWithItem.target = self
@@ -200,6 +237,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     var settingsWindow: NSWindow?
+    
+    @objc func toggleCursorChat() {
+        toggleCursorChatInput()
+    }
     
     @objc func openAppSettings() {
         // If window already exists, just bring it to front

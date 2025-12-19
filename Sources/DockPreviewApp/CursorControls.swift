@@ -198,6 +198,7 @@ class CursorController {
 struct CursorChatInputView: View {
     @State private var message: String = ""
     @State private var imagePath: String? = nil
+    @State private var isDragging: Bool = false
     @FocusState private var isFocused: Bool
     var onClose: () -> Void
     
@@ -294,6 +295,11 @@ struct CursorChatInputView: View {
                     .onSubmit {
                         sendAndClose()
                     }
+                    .allowsHitTesting(true)
+                    .onDrop(of: [.image, .fileURL], isTargeted: .constant(false)) { _ in
+                        // Block drops on TextField, let parent handle it
+                        return false
+                    }
                 
                 // Image button
                 Button(action: selectImage) {
@@ -325,15 +331,47 @@ struct CursorChatInputView: View {
         }
         .frame(width: 500)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.12, green: 0.12, blue: 0.14))
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(red: 0.12, green: 0.12, blue: 0.14))
+                
+                // Drag overlay
+                if isDragging {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(cursorBlue.opacity(0.1))
+                        .overlay(
+                            VStack(spacing: 8) {
+                                Image(systemName: "photo.badge.plus")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(cursorBlue)
+                                Text("Solte a imagem aqui")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(cursorBlue)
+                            }
+                        )
+                        .transition(.opacity)
+                }
+            }
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(cursorBlue.opacity(0.3), lineWidth: 1)
+                .stroke(isDragging ? cursorBlue : cursorBlue.opacity(0.3), lineWidth: isDragging ? 2 : 1)
         )
+        .animation(.easeInOut(duration: 0.2), value: isDragging)
+        .onDrop(of: [.fileURL, .image], isTargeted: $isDragging) { providers in
+            handleDrop(providers: providers)
+        }
         .onAppear {
             isFocused = true
+            
+            // Setup ESC key handler
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [onClose] event in
+                if event.keyCode == 53 { // ESC key
+                    onClose()
+                    return nil
+                }
+                return event
+            }
         }
     }
     
@@ -353,6 +391,69 @@ struct CursorChatInputView: View {
             if let url = panel.url {
                 imagePath = url.path
             }
+        }
+    }
+    
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        
+        // Try to load as file URL first
+        if provider.hasItemConformingToTypeIdentifier("public.file-url") {
+            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, error in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                
+                // Check if it's an image file
+                let imageExtensions = ["png", "jpg", "jpeg", "heic", "gif", "bmp", "tiff"]
+                let fileExtension = url.pathExtension.lowercased()
+                
+                if imageExtensions.contains(fileExtension) {
+                    DispatchQueue.main.async {
+                        self.imagePath = url.path
+                    }
+                }
+            }
+            return true
+        }
+        
+        // Try to load as image data (for screenshots/clipboard)
+        if provider.hasItemConformingToTypeIdentifier("public.image") {
+            provider.loadItem(forTypeIdentifier: "public.image", options: nil) { item, error in
+                if let url = item as? URL {
+                    // It's a file URL
+                    DispatchQueue.main.async {
+                        self.imagePath = url.path
+                    }
+                } else if let data = item as? Data, let image = NSImage(data: data) {
+                    // It's raw image data - save to temp file
+                    self.saveImageToTemp(image: image)
+                } else if let image = item as? NSImage {
+                    // Direct NSImage
+                    self.saveImageToTemp(image: image)
+                }
+            }
+            return true
+        }
+        
+        return false
+    }
+    
+    private func saveImageToTemp(image: NSImage) {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
+        
+        let tempDir = NSTemporaryDirectory()
+        let fileName = "cursor_screenshot_\(UUID().uuidString).png"
+        let tempPath = (tempDir as NSString).appendingPathComponent(fileName)
+        
+        do {
+            try pngData.write(to: URL(fileURLWithPath: tempPath))
+            DispatchQueue.main.async {
+                self.imagePath = tempPath
+            }
+        } catch {
+            print("Error saving temp image: \(error)")
         }
     }
     
