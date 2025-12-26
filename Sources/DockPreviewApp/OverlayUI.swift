@@ -58,6 +58,21 @@ struct WindowPreviewCard: View {
         DockMonitor.shared.compactOverlayMode ? 10 : 11
     }
     
+    // Helper functions for Chrome profile badge
+    private func profileInitial(for name: String) -> String {
+        return String(name.prefix(1).uppercased())
+    }
+    
+    private func profileColor(for name: String) -> Color {
+        // Generate a consistent color based on profile name
+        let colors: [Color] = [
+            .blue, .green, .orange, .purple, .pink, .red, .teal, .indigo, .cyan, .mint
+        ]
+        
+        let hash = abs(name.hashValue)
+        return colors[hash % colors.count]
+    }
+    
     var body: some View {
         VStack(spacing: 6) {
             ZStack {
@@ -107,21 +122,53 @@ struct WindowPreviewCard: View {
                     .frame(width: cardWidth, height: cardHeight)
                 }
                 
-                // Minimized badge (top-right)
-                if window.isMinimized {
-                    VStack {
-                        HStack {
-                            Spacer()
+                // Top-right badges (minimized and Chrome profile)
+                VStack {
+                    HStack(spacing: 4) {
+                        Spacer()
+                        
+                        // Chrome profile badge
+                        if let profile = window.chromeProfile {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.black.opacity(0.75))
+                                    .frame(width: 24, height: 24)
+                                
+                                if let avatar = profile.avatarImage {
+                                    Image(nsImage: avatar)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 20, height: 20)
+                                        .clipShape(Circle())
+                                } else {
+                                    // Fallback to colored circle with initial
+                                    ZStack {
+                                        Circle()
+                                            .fill(profileColor(for: profile.name))
+                                            .frame(width: 20, height: 20)
+                                        
+                                        Text(profileInitial(for: profile.name))
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundColor(.white)
+                                    }
+                                }
+                            }
+                            .padding(4)
+                            .help(profile.name) // Tooltip with profile name
+                        }
+                        
+                        // Minimized badge
+                        if window.isMinimized {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundColor(.yellow)
                                 .background(Circle().fill(Color.black.opacity(0.6)))
                                 .font(.system(size: 16))
                                 .padding(4)
                         }
-                        Spacer()
                     }
-                    .frame(width: cardWidth, height: cardHeight)
+                    Spacer()
                 }
+                .frame(width: cardWidth, height: cardHeight)
             }
             
             HStack(spacing: 4) {

@@ -9,6 +9,7 @@ struct AppWindow {
     let ownerPID: pid_t
     let isMinimized: Bool
     let axElement: AXUIElement?
+    let chromeProfile: ChromeProfile? // Profile info for Chrome windows
 }
 
 class WindowFetcher {
@@ -18,6 +19,59 @@ class WindowFetcher {
     
     private static func cacheKey(pid: pid_t, title: String) -> String {
         return "\(pid)-\(title)"
+    }
+    
+    // Detect Chrome profile from window title
+    // Chrome adds the profile name to the window title in format: "Page Title - Browser: Profile Name"
+    private static func detectChromeProfileFromTitle(title: String, appName: String) -> ChromeProfile? {
+        // Only detect for Chrome-based browsers
+        guard ChromeProfileFetcher.isChromiumBrowser(appName) else {
+            return nil
+        }
+        
+        // Get all available profiles
+        let profiles = ChromeProfileFetcher.getProfiles(for: appName)
+        guard !profiles.isEmpty else { return nil }
+        
+        // Chrome window titles have format: "Page Title - Browser Name: Profile Name"
+        // Example: "Nova guia - Google Chrome: Gisele"
+        
+        // Try to extract profile name from title
+        let components = title.components(separatedBy: ": ")
+        
+        if components.count >= 2 {
+            // Last component after ": " is typically the profile name
+            let possibleProfileName = components.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            
+            // Try to find exact match by profile name
+            if let matchedProfile = profiles.first(where: { $0.name == possibleProfileName }) {
+                print("Matched profile from title '\(title)': \(matchedProfile.name) (\(matchedProfile.id))")
+                return matchedProfile
+            }
+            
+            // Try case-insensitive match
+            if let matchedProfile = profiles.first(where: { 
+                $0.name.lowercased() == possibleProfileName.lowercased() 
+            }) {
+                print("Matched profile (case-insensitive) from title '\(title)': \(matchedProfile.name) (\(matchedProfile.id))")
+                return matchedProfile
+            }
+        }
+        
+        // Fallback: Check if any profile name appears anywhere in the title
+        for profile in profiles {
+            if title.contains(profile.name) {
+                print("Matched profile (contains) from title '\(title)': \(profile.name) (\(profile.id))")
+                return profile
+            }
+        }
+        
+        // If no match found, return Default profile as fallback
+        let defaultProfile = profiles.first { $0.id == "Default" }
+        if defaultProfile != nil {
+            print("No profile match in title '\(title)', using Default profile")
+        }
+        return defaultProfile
     }
     
     private static func cleanupCacheIfNeeded() {
@@ -55,17 +109,17 @@ class WindowFetcher {
         print("Found App PID: \(pid)")
         
         // Use Accessibility API as primary source - more reliable for activation
-        return getAllWindowsViaAccessibility(for: pid, app: app)
+        return getAllWindowsViaAccessibility(for: pid, app: app, appName: appName)
     }
     
-    private static func getAllWindowsViaAccessibility(for pid: pid_t, app: NSRunningApplication) -> [AppWindow] {
+    private static func getAllWindowsViaAccessibility(for pid: pid_t, app: NSRunningApplication, appName: String) -> [AppWindow] {
         let appRef = AXUIElementCreateApplication(pid)
         var windowsRef: AnyObject?
         let result = AXUIElementCopyAttributeValue(appRef, kAXWindowsAttribute as CFString, &windowsRef)
         
         guard result == .success, let axWindows = windowsRef as? [AXUIElement] else {
             print("Could not get AX windows, falling back to CGWindowList")
-            return getVisibleWindowsFallback(for: pid)
+            return getVisibleWindowsFallback(for: pid, appName: appName)
         }
         
         // Also get CGWindowList for capturing images of visible windows
@@ -117,6 +171,9 @@ class WindowFetcher {
             let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
             let cacheKeyStr = cacheKey(pid: pid, title: displayTitle)
             
+            // Detect Chrome profile from this specific window's title
+            let chromeProfile = detectChromeProfileFromTitle(title: displayTitle, appName: appName)
+            
             // Get image - pass mutable cgWindowsMap to remove used windows
             var image: NSImage?
             if isMinimized {
@@ -136,7 +193,7 @@ class WindowFetcher {
                 }
             }
             
-            print("Added window: \(displayTitle) (minimized: \(isMinimized), hasImage: \(image != nil))")
+            print("Added window: \(displayTitle) (minimized: \(isMinimized), hasImage: \(image != nil), profile: \(chromeProfile?.name ?? "none"))")
             
             windows.append(AppWindow(
                 id: windowID,
@@ -145,7 +202,8 @@ class WindowFetcher {
                 bounds: bounds,
                 ownerPID: pid,
                 isMinimized: isMinimized,
-                axElement: axWindow
+                axElement: axWindow,
+                chromeProfile: chromeProfile
             ))
         }
         
@@ -219,7 +277,7 @@ class WindowFetcher {
         return nil
     }
     
-    private static func getVisibleWindowsFallback(for pid: pid_t) -> [AppWindow] {
+    private static func getVisibleWindowsFallback(for pid: pid_t, appName: String) -> [AppWindow] {
         guard let windowListInfo = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
@@ -240,6 +298,9 @@ class WindowFetcher {
             let windowID = CGWindowID(idNum)
             let cacheKeyStr = cacheKey(pid: pid, title: title)
             
+            // Detect Chrome profile from this specific window's title
+            let chromeProfile = detectChromeProfileFromTitle(title: title, appName: appName)
+            
             var image = captureWindowImage(windowID: windowID, bounds: bounds)
             
             if let capturedImage = image {
@@ -252,7 +313,7 @@ class WindowFetcher {
                 print("Using cached image for: \(title)")
             }
             
-            windows.append(AppWindow(id: windowID, title: title, image: image, bounds: bounds, ownerPID: pid, isMinimized: false, axElement: nil))
+            windows.append(AppWindow(id: windowID, title: title, image: image, bounds: bounds, ownerPID: pid, isMinimized: false, axElement: nil, chromeProfile: chromeProfile))
         }
         
         return windows
