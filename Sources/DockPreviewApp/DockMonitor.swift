@@ -47,6 +47,7 @@ class DockMonitor: ObservableObject {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var lastActiveAppBundleID: String?
+    private var eventTapHealthTimer: Timer?
 
     init() {
         // Load saved preferences
@@ -59,6 +60,7 @@ class DockMonitor: ObservableObject {
         startMonitoring()
         setupEventTap()
         setupActiveAppTracking()
+        setupEventTapRecovery()
     }
     
     private func updateEventTapState() {
@@ -69,6 +71,8 @@ class DockMonitor: ObservableObject {
     }
     
     deinit {
+        eventTapHealthTimer?.invalidate()
+        eventTapHealthTimer = nil
         if let eventTap = eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
         }
@@ -105,9 +109,38 @@ class DockMonitor: ObservableObject {
         lastActiveAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
     
+    /// Re-enable event tap after sleep/wake or when macOS disables it by timeout; periodic check as fallback.
+    private func setupEventTapRecovery() {
+        // Re-enable tap when the display wakes (e.g. after closing the laptop)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reenableEventTapIfNeeded()
+        }
+        
+        // Periodic health check: macOS can disable the tap without always sending the disable callback
+        eventTapHealthTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.reenableEventTapIfNeeded()
+        }
+        RunLoop.main.add(eventTapHealthTimer!, forMode: .common)
+    }
+    
+    private func reenableEventTapIfNeeded() {
+        guard clickToHideEnabled, let tap = eventTap else { return }
+        if !CGEvent.tapIsEnabled(tap: tap) {
+            CGEvent.tapEnable(tap: tap, enable: true)
+            print("Event tap was disabled (recovered by health check or wake), re-enabled")
+        }
+    }
+    
     private func setupEventTap() {
         // Create an event tap to intercept clicks BEFORE they reach the Dock
+        // Include tapDisabledByTimeout/tapDisabledByUserInput so we get notified and can re-enable
         let eventMask = (1 << CGEventType.leftMouseDown.rawValue)
+            | (1 << CGEventType.tapDisabledByTimeout.rawValue)
+            | (1 << CGEventType.tapDisabledByUserInput.rawValue)
         
         // Use a C function pointer wrapper
         let callback: CGEventTapCallBack = { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
@@ -136,6 +169,15 @@ class DockMonitor: ObservableObject {
     }
     
     private func handleEventTap(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        // Re-enable tap when macOS disables it (timeout after inactivity or sleep/wake)
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if clickToHideEnabled, let tap = eventTap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                print("Event tap was disabled (\(type == .tapDisabledByTimeout ? "timeout" : "user")), re-enabled")
+            }
+            return nil
+        }
+        
         // Get mouse location from the event
         let mouseLoc = event.location
         guard let screenHeight = NSScreen.main?.frame.height else {
