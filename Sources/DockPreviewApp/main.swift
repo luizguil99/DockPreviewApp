@@ -201,11 +201,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let killButtonHostingView = NSHostingView(rootView: killButtonToggleView)
         killButtonHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
-        
+
         let killButtonToggleItem = NSMenuItem()
         killButtonToggleItem.view = killButtonHostingView
         menu.addItem(killButtonToggleItem)
-        
+
+        // Activate on hover toggle
+        let hoverToggleView = DockMonitorToggleView(
+            title: "Activate Window on Hover",
+            keyPath: \.activateOnHover
+        )
+        let hoverHostingView = NSHostingView(rootView: hoverToggleView)
+        hoverHostingView.frame = NSRect(x: 0, y: 0, width: 320, height: 32)
+
+        let hoverToggleItem = NSMenuItem()
+        hoverToggleItem.view = hoverHostingView
+        menu.addItem(hoverToggleItem)
+
         menu.addItem(NSMenuItem.separator())
         
         // Ask Cursor AI

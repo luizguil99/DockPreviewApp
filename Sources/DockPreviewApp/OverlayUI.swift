@@ -44,7 +44,8 @@ struct WindowPreviewCard: View {
     let onMinimize: () -> Void
     let onFullscreen: () -> Void
     @State private var isHovered = false
-    
+    @State private var hoverTask: Task<Void, Never>? = nil
+
     // Compact mode sizes
     private var cardWidth: CGFloat {
         DockMonitor.shared.compactOverlayMode ? 120 : 160
@@ -201,9 +202,17 @@ struct WindowPreviewCard: View {
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
+            hoverTask?.cancel()
+            if hovering && DockMonitor.shared.activateOnHover {
+                hoverTask = Task {
+                    try? await Task.sleep(nanoseconds: 350_000_000) // 0.35s
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { onSelect() }
+                }
+            }
         }
         .onTapGesture {
-            onSelect()
+            if !DockMonitor.shared.activateOnHover { onSelect() }
         }
     }
 }

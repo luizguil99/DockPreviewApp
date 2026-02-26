@@ -40,6 +40,11 @@ class DockMonitor: ObservableObject {
             UserDefaults.standard.set(showKillButton, forKey: "showKillButton")
         }
     }
+    @Published var activateOnHover: Bool = false {
+        didSet {
+            UserDefaults.standard.set(activateOnHover, forKey: "activateOnHover")
+        }
+    }
     
     private var icons: [DockIcon] = []
     private var timer: Timer?
@@ -56,6 +61,7 @@ class DockMonitor: ObservableObject {
         cursorOverlayEnabled = UserDefaults.standard.object(forKey: "cursorOverlayEnabled") as? Bool ?? true
         compactOverlayMode = UserDefaults.standard.object(forKey: "compactOverlayMode") as? Bool ?? true
         showKillButton = UserDefaults.standard.object(forKey: "showKillButton") as? Bool ?? false
+        activateOnHover = UserDefaults.standard.object(forKey: "activateOnHover") as? Bool ?? false
         
         startMonitoring()
         setupEventTap()

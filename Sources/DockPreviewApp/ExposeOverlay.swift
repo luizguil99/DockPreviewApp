@@ -11,6 +11,7 @@ struct ExposeWindowTile: View {
 
     @State private var appeared = false
     @State private var isHovered = false
+    @State private var hoverTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(spacing: 8) {
@@ -68,8 +69,20 @@ struct ExposeWindowTile: View {
         )
         .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isHovered)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .onTapGesture { onSelect() }
+        .onHover { hovering in
+            isHovered = hovering
+            hoverTask?.cancel()
+            if hovering && DockMonitor.shared.activateOnHover {
+                hoverTask = Task {
+                    try? await Task.sleep(nanoseconds: 350_000_000) // 0.35s
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { onSelect() }
+                }
+            }
+        }
+        .onTapGesture {
+            if !DockMonitor.shared.activateOnHover { onSelect() }
+        }
         .onAppear { appeared = true }
     }
 }
