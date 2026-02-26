@@ -164,11 +164,14 @@ class WindowFetcher {
             
             let bounds = CGRect(origin: position, size: size)
             
-            // Generate a unique ID - use index to ensure uniqueness
-            let windowID = CGWindowID(pid) * 1000 + CGWindowID(windowIndex)
             windowIndex += 1
-            
             let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
+
+            // Stable ID based on (pid, title) — does not change with z-order
+            var hasher = Hasher()
+            hasher.combine(pid)
+            hasher.combine(displayTitle)
+            let windowID = CGWindowID(truncatingIfNeeded: UInt(bitPattern: hasher.finalize()))
             let cacheKeyStr = cacheKey(pid: pid, title: displayTitle)
             
             // Detect Chrome profile from this specific window's title

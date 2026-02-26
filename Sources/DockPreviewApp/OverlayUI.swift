@@ -945,8 +945,22 @@ class OverlayWindowManager: ObservableObject {
             panel?.contentView = hostingView
         }
         
-        // Update the windows model (this preserves hover states in existing views)
-        windowsModel.windows = windows
+        // Update the windows model preserving previous order to avoid layout shift.
+        // The AX API returns windows in z-order, which changes after each activation,
+        // so we re-sort the new list to match the order the user already sees.
+        if !windowsModel.windows.isEmpty {
+            var pool = windows
+            var ordered: [AppWindow] = []
+            for prev in windowsModel.windows {
+                if let i = pool.firstIndex(where: { $0.id == prev.id }) {
+                    ordered.append(pool.remove(at: i))
+                }
+            }
+            ordered.append(contentsOf: pool) // any genuinely new windows go at the end
+            windowsModel.windows = ordered
+        } else {
+            windowsModel.windows = windows
+        }
         windowsModel.chromeProfiles = profiles
         windowsModel.appName = icon.title
         
