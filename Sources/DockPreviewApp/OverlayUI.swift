@@ -86,8 +86,11 @@ struct WindowPreviewCard: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(
-                                    isHovered ? Color.blue : (window.isMinimized ? Color.yellow.opacity(0.5) : Color.white.opacity(0.2)),
-                                    lineWidth: isHovered ? 2 : (window.isMinimized ? 2 : 1)
+                                    isHovered ? Color.blue
+                                        : window.isMinimized ? Color.yellow.opacity(0.5)
+                                        : window.isFocused  ? Color.white.opacity(0.85)
+                                        : Color.white.opacity(0.2),
+                                    lineWidth: isHovered ? 2 : (window.isFocused || window.isMinimized ? 2 : 1)
                                 )
                         )
                 } else {
@@ -97,7 +100,12 @@ struct WindowPreviewCard: View {
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(isHovered ? Color.blue : Color.white.opacity(0.2), lineWidth: isHovered ? 2 : 1)
+                                .stroke(
+                                    isHovered ? Color.blue
+                                        : window.isFocused ? Color.white.opacity(0.85)
+                                        : Color.white.opacity(0.2),
+                                    lineWidth: isHovered ? 2 : (window.isFocused ? 2 : 1)
+                                )
                         )
                 }
                 
@@ -872,6 +880,13 @@ class OverlayWindowManager: ObservableObject {
                 windowsModel: windowsModel,
                 onSelect: { [weak self] window in
                     self?.isRefreshing = true
+                    // Immediately flip isFocused so the border moves without waiting for the refresh
+                    self?.windowsModel.windows = self?.windowsModel.windows.map {
+                        AppWindow(id: $0.id, title: $0.title, image: $0.image, bounds: $0.bounds,
+                                  ownerPID: $0.ownerPID, isMinimized: $0.isMinimized,
+                                  isFocused: $0.id == window.id,
+                                  axElement: $0.axElement, chromeProfile: $0.chromeProfile)
+                    } ?? []
                     WindowFetcher.activateWindow(window: window)
                     // Refresh overlay after a short delay to capture updated window image
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {

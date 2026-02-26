@@ -8,6 +8,7 @@ struct AppWindow {
     let bounds: CGRect
     let ownerPID: pid_t
     let isMinimized: Bool
+    let isFocused: Bool          // true for the frontmost (main) window of the app
     let axElement: AXUIElement?
     let chromeProfile: ChromeProfile? // Profile info for Chrome windows
 }
@@ -164,6 +165,11 @@ class WindowFetcher {
             
             let bounds = CGRect(origin: position, size: size)
             
+            // Check if this is the main (frontmost) window of the app
+            var mainValue: AnyObject?
+            AXUIElementCopyAttributeValue(axWindow, kAXMainAttribute as CFString, &mainValue)
+            let isMain = (mainValue as? Bool) ?? false
+
             windowIndex += 1
             let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
 
@@ -173,7 +179,7 @@ class WindowFetcher {
             hasher.combine(displayTitle)
             let windowID = CGWindowID(truncatingIfNeeded: UInt(bitPattern: hasher.finalize()))
             let cacheKeyStr = cacheKey(pid: pid, title: displayTitle)
-            
+
             // Detect Chrome profile from this specific window's title
             let chromeProfile = detectChromeProfileFromTitle(title: displayTitle, appName: appName)
             
@@ -205,6 +211,7 @@ class WindowFetcher {
                 bounds: bounds,
                 ownerPID: pid,
                 isMinimized: isMinimized,
+                isFocused: isMain,
                 axElement: axWindow,
                 chromeProfile: chromeProfile
             ))
@@ -316,7 +323,9 @@ class WindowFetcher {
                 print("Using cached image for: \(title)")
             }
             
-            windows.append(AppWindow(id: windowID, title: title, image: image, bounds: bounds, ownerPID: pid, isMinimized: false, axElement: nil, chromeProfile: chromeProfile))
+            // First window in CGWindowList is frontmost
+            let isFocused = windows.isEmpty
+            windows.append(AppWindow(id: windowID, title: title, image: image, bounds: bounds, ownerPID: pid, isMinimized: false, isFocused: isFocused, axElement: nil, chromeProfile: chromeProfile))
         }
         
         return windows
