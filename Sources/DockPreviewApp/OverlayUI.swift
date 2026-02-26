@@ -658,6 +658,7 @@ class OverlayWindowManager: ObservableObject {
     private var checkTimer: Timer?
     private var isRefreshing = false // Flag to prevent closing during refresh
     private var lastAppName: String = "" // Track app to force panel recreation on app change
+    private var windowOrderByApp: [String: [CGWindowID]] = [:] // Per-app stable window order
     
     init() {
         // Setup subscribers - use shared DockMonitor
@@ -969,22 +970,24 @@ class OverlayWindowManager: ObservableObject {
             panel?.contentView = hostingView
         }
         
-        // Update the windows model preserving previous order to avoid layout shift.
-        // The AX API returns windows in z-order, which changes after each activation,
-        // so we re-sort the new list to match the order the user already sees.
-        if !windowsModel.windows.isEmpty {
+        // Preserve window order per app across activations and overlay open/close cycles.
+        // windowOrderByApp stores each app's order independently, so switching apps
+        // and coming back still shows the original order.
+        let savedOrder = windowOrderByApp[icon.title] ?? []
+        if !savedOrder.isEmpty {
             var pool = windows
             var ordered: [AppWindow] = []
-            for prev in windowsModel.windows {
-                if let i = pool.firstIndex(where: { $0.id == prev.id }) {
+            for id in savedOrder {
+                if let i = pool.firstIndex(where: { $0.id == id }) {
                     ordered.append(pool.remove(at: i))
                 }
             }
-            ordered.append(contentsOf: pool) // any genuinely new windows go at the end
+            ordered.append(contentsOf: pool) // genuinely new windows go at the end
             windowsModel.windows = ordered
         } else {
             windowsModel.windows = windows
         }
+        windowOrderByApp[icon.title] = windowsModel.windows.map { $0.id }
         windowsModel.chromeProfiles = profiles
         windowsModel.appName = icon.title
         
