@@ -200,7 +200,7 @@ class DockMonitor: ObservableObject {
         
         // Find the running app - use flexible matching
         let runningApps = NSWorkspace.shared.runningApplications
-        let app = findRunningApp(named: clickedIcon.title, in: runningApps)
+        let app = RunningAppResolver.application(matchingDockTitle: clickedIcon.title, runningApps: runningApps)
         
         guard let app = app else {
             print("App not found running: \(clickedIcon.title)")
@@ -234,44 +234,6 @@ class DockMonitor: ObservableObject {
             self.dockIconClicked = clickedIcon.title
         }
         return Unmanaged.passRetained(event) // Pass through for other cases
-    }
-    
-    private func findRunningApp(named iconTitle: String, in runningApps: [NSRunningApplication]) -> NSRunningApplication? {
-        // 1. Exact match by localized name
-        if let app = runningApps.first(where: { $0.localizedName == iconTitle }) {
-            return app
-        }
-        
-        // 2. Case-insensitive match
-        let lowerTitle = iconTitle.lowercased()
-        if let app = runningApps.first(where: { $0.localizedName?.lowercased() == lowerTitle }) {
-            return app
-        }
-        
-        // 3. Partial match (icon title contains app name or vice versa)
-        if let app = runningApps.first(where: { 
-            guard let name = $0.localizedName?.lowercased() else { return false }
-            return name.contains(lowerTitle) || lowerTitle.contains(name)
-        }) {
-            return app
-        }
-        
-        // 4. Bundle identifier match for known apps with different names
-        let knownBundles: [String: String] = [
-            "whatsapp": "net.whatsapp.WhatsApp",
-            "whatsapp desktop": "net.whatsapp.WhatsApp",
-            "telegram": "ru.keepcoder.Telegram",
-            "vscode": "com.microsoft.VSCode",
-            "visual studio code": "com.microsoft.VSCode",
-            "code": "com.microsoft.VSCode"
-        ]
-        
-        if let bundleID = knownBundles[lowerTitle],
-           let app = runningApps.first(where: { $0.bundleIdentifier == bundleID }) {
-            return app
-        }
-        
-        return nil
     }
 
     private func getDockAXUIElement() -> AXUIElement? {

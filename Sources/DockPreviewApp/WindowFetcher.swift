@@ -94,23 +94,22 @@ class WindowFetcher {
     }
     
     static func getWindows(for appName: String) -> [AppWindow] {
-        print("Fetching windows for: \(appName)")
-        let runningApps = NSWorkspace.shared.runningApplications
-        
-        guard let app = runningApps.first(where: { $0.localizedName == appName }) else {
-            print("App \(appName) not found in running applications.")
-            if let looseMatch = runningApps.first(where: { $0.localizedName?.contains(appName) == true }) {
-                print("Found loose match: \(looseMatch.localizedName ?? "")")
-                return getWindows(for: looseMatch.localizedName ?? "")
-            }
+        let trimmed = appName.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("Fetching windows for: \(trimmed)")
+
+        guard let app = RunningAppResolver.application(matchingDockTitle: trimmed) else {
+            print("App \(trimmed) not found in running applications.")
             return []
         }
-        
+
         let pid = app.processIdentifier
-        print("Found App PID: \(pid)")
-        
-        // Use Accessibility API as primary source - more reliable for activation
-        return getAllWindowsViaAccessibility(for: pid, app: app, appName: appName)
+        let resolvedName: String = {
+            if let n = app.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty { return n }
+            return trimmed
+        }()
+        print("Found App PID: \(pid) (resolved name: \(resolvedName))")
+
+        return getAllWindowsViaAccessibility(for: pid, app: app, appName: resolvedName)
     }
     
     private static func getAllWindowsViaAccessibility(for pid: pid_t, app: NSRunningApplication, appName: String) -> [AppWindow] {
