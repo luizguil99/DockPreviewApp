@@ -17,9 +17,9 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("Cocoa"),
-                .linkedFramework("SwiftUI")
+                .linkedFramework("SwiftUI"),
+                .linkedFramework("ScreenCaptureKit")
             ]
         )
     ]
 )
-

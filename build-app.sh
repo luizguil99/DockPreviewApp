@@ -65,13 +65,15 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>DockPreview needs Apple Events to open new windows in apps.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>DockPreview can optionally show visual previews of open windows. Without permission, it displays window details instead.</string>
 </dict>
 </plist>
 EOF

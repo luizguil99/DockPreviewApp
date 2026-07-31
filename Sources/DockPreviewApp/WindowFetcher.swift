@@ -1,25 +1,53 @@
 import Cocoa
 import ApplicationServices
+import ScreenCaptureKit
 
 struct AppWindow {
     let id: CGWindowID
     let title: String
     let image: NSImage?
+    let documentURL: String?
     let bounds: CGRect
     let ownerPID: pid_t
     let isMinimized: Bool
     let isFocused: Bool          // true for the frontmost (main) window of the app
     let axElement: AXUIElement?
     let chromeProfile: ChromeProfile? // Profile info for Chrome windows
+
+    func replacingImage(_ newImage: NSImage?) -> AppWindow {
+        AppWindow(
+            id: id,
+            title: title,
+            image: newImage,
+            documentURL: documentURL,
+            bounds: bounds,
+            ownerPID: ownerPID,
+            isMinimized: isMinimized,
+            isFocused: isFocused,
+            axElement: axElement,
+            chromeProfile: chromeProfile
+        )
+    }
+
+    func replacingFocus(_ focused: Bool) -> AppWindow {
+        AppWindow(
+            id: id,
+            title: title,
+            image: image,
+            documentURL: documentURL,
+            bounds: bounds,
+            ownerPID: ownerPID,
+            isMinimized: isMinimized,
+            isFocused: focused,
+            axElement: axElement,
+            chromeProfile: chromeProfile
+        )
+    }
 }
 
 class WindowFetcher {
-    // Cache for last successful window captures (key: "pid-title")
-    private static var imageCache: [String: NSImage] = [:]
-    private static let maxCacheSize = 50 // Limit cache to 50 images
-    
-    private static func cacheKey(pid: pid_t, title: String) -> String {
-        return "\(pid)-\(title)"
+    static var isScreenCaptureAuthorized: Bool {
+        CGPreflightScreenCaptureAccess()
     }
     
     // Detect Chrome profile from window title
@@ -75,24 +103,6 @@ class WindowFetcher {
         return defaultProfile
     }
     
-    private static func cleanupCacheIfNeeded() {
-        if imageCache.count > maxCacheSize {
-            // Remove oldest entries (simple approach: remove half)
-            let keysToRemove = Array(imageCache.keys.prefix(imageCache.count / 2))
-            for key in keysToRemove {
-                imageCache.removeValue(forKey: key)
-            }
-            print("Cache cleaned: removed \(keysToRemove.count) entries")
-        }
-    }
-    
-    static func clearCache(for pid: pid_t) {
-        let keysToRemove = imageCache.keys.filter { $0.hasPrefix("\(pid)-") }
-        for key in keysToRemove {
-            imageCache.removeValue(forKey: key)
-        }
-    }
-    
     static func getWindows(for appName: String) -> [AppWindow] {
         let trimmed = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         print("Fetching windows for: \(trimmed)")
@@ -109,10 +119,10 @@ class WindowFetcher {
         }()
         print("Found App PID: \(pid) (resolved name: \(resolvedName))")
 
-        return getAllWindowsViaAccessibility(for: pid, app: app, appName: resolvedName)
+        return getAllWindowsViaAccessibility(for: pid, appName: resolvedName)
     }
     
-    private static func getAllWindowsViaAccessibility(for pid: pid_t, app: NSRunningApplication, appName: String) -> [AppWindow] {
+    private static func getAllWindowsViaAccessibility(for pid: pid_t, appName: String) -> [AppWindow] {
         let appRef = AXUIElementCreateApplication(pid)
         var windowsRef: AnyObject?
         let result = AXUIElementCopyAttributeValue(appRef, kAXWindowsAttribute as CFString, &windowsRef)
@@ -122,7 +132,7 @@ class WindowFetcher {
             return getVisibleWindowsFallback(for: pid, appName: appName)
         }
         
-        // Also get CGWindowList for capturing images of visible windows
+        // Quartz metadata gives us real window IDs without reading window pixels.
         var cgWindowsMap = getCGWindowsMap(for: pid)
         
         var windows: [AppWindow] = []
@@ -171,42 +181,28 @@ class WindowFetcher {
 
             windowIndex += 1
             let displayTitle = title.isEmpty ? "Window \(windowIndex)" : title
+            let cgWindow = takeBestCGWindow(bounds: bounds, title: title, cgWindows: &cgWindowsMap)
+            let windowID = cgWindow?.id ?? fallbackWindowID(
+                pid: pid,
+                title: displayTitle,
+                bounds: bounds,
+                index: windowIndex
+            )
 
-            // Stable ID based on (pid, title) — does not change with z-order
-            var hasher = Hasher()
-            hasher.combine(pid)
-            hasher.combine(displayTitle)
-            let windowID = CGWindowID(truncatingIfNeeded: UInt(bitPattern: hasher.finalize()))
-            let cacheKeyStr = cacheKey(pid: pid, title: displayTitle)
+            var documentValue: AnyObject?
+            AXUIElementCopyAttributeValue(axWindow, kAXDocumentAttribute as CFString, &documentValue)
+            let documentURL = (documentValue as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
             // Detect Chrome profile from this specific window's title
             let chromeProfile = detectChromeProfileFromTitle(title: displayTitle, appName: appName)
             
-            // Get image - pass mutable cgWindowsMap to remove used windows
-            var image: NSImage?
-            if isMinimized {
-                image = getMinimizedWindowImage(app: app, axWindow: axWindow)
-            } else {
-                // Try to find matching CG window for image capture
-                image = findAndCaptureImage(bounds: bounds, title: title, cgWindows: &cgWindowsMap)
-                
-                if let capturedImage = image {
-                    // Cache successful capture
-                    imageCache[cacheKeyStr] = capturedImage
-                    cleanupCacheIfNeeded()
-                } else if let cachedImage = imageCache[cacheKeyStr] {
-                    // Use cached image as fallback
-                    image = cachedImage
-                    print("Using cached image for: \(displayTitle)")
-                }
-            }
-            
-            print("Added window: \(displayTitle) (minimized: \(isMinimized), hasImage: \(image != nil), profile: \(chromeProfile?.name ?? "none"))")
+            print("Added window: \(displayTitle) (minimized: \(isMinimized), profile: \(chromeProfile?.name ?? "none"))")
             
             windows.append(AppWindow(
                 id: windowID,
                 title: displayTitle,
-                image: image,
+                image: nil,
+                documentURL: documentURL?.isEmpty == false ? documentURL : nil,
                 bounds: bounds,
                 ownerPID: pid,
                 isMinimized: isMinimized,
@@ -243,7 +239,11 @@ class WindowFetcher {
         return result
     }
     
-    private static func findAndCaptureImage(bounds: CGRect, title: String, cgWindows: inout [(id: CGWindowID, bounds: CGRect, title: String)]) -> NSImage? {
+    private static func takeBestCGWindow(
+        bounds: CGRect,
+        title: String,
+        cgWindows: inout [(id: CGWindowID, bounds: CGRect, title: String)]
+    ) -> (id: CGWindowID, bounds: CGRect, title: String)? {
         // Find matching CG window - prioritize title match, then position match
         var bestMatchIndex: Int? = nil
         var bestMatchScore = 0
@@ -276,14 +276,27 @@ class WindowFetcher {
             }
         }
         
-        // If we found a match, capture and remove from list to prevent reuse
+        // Remove the match so duplicate titles cannot reuse the same Quartz window.
         if let index = bestMatchIndex, bestMatchScore > 0 {
-            let cg = cgWindows[index]
-            cgWindows.remove(at: index) // Remove so it won't be matched again
-            return captureWindowImage(windowID: cg.id, bounds: cg.bounds)
+            return cgWindows.remove(at: index)
         }
         
         return nil
+    }
+
+    private static func fallbackWindowID(
+        pid: pid_t,
+        title: String,
+        bounds: CGRect,
+        index: Int
+    ) -> CGWindowID {
+        var hasher = Hasher()
+        hasher.combine(pid)
+        hasher.combine(title)
+        hasher.combine(Int(bounds.origin.x.rounded()))
+        hasher.combine(Int(bounds.origin.y.rounded()))
+        hasher.combine(index)
+        return CGWindowID(truncatingIfNeeded: UInt(bitPattern: hasher.finalize()))
     }
     
     private static func getVisibleWindowsFallback(for pid: pid_t, appName: String) -> [AppWindow] {
@@ -305,86 +318,133 @@ class WindowFetcher {
             
             let title = info[kCGWindowName as String] as? String ?? "Window"
             let windowID = CGWindowID(idNum)
-            let cacheKeyStr = cacheKey(pid: pid, title: title)
-            
             // Detect Chrome profile from this specific window's title
             let chromeProfile = detectChromeProfileFromTitle(title: title, appName: appName)
             
-            var image = captureWindowImage(windowID: windowID, bounds: bounds)
-            
-            if let capturedImage = image {
-                // Cache successful capture
-                imageCache[cacheKeyStr] = capturedImage
-                cleanupCacheIfNeeded()
-            } else if let cachedImage = imageCache[cacheKeyStr] {
-                // Use cached image as fallback
-                image = cachedImage
-                print("Using cached image for: \(title)")
-            }
-            
             // First window in CGWindowList is frontmost
             let isFocused = windows.isEmpty
-            windows.append(AppWindow(id: windowID, title: title, image: image, bounds: bounds, ownerPID: pid, isMinimized: false, isFocused: isFocused, axElement: nil, chromeProfile: chromeProfile))
+            windows.append(AppWindow(
+                id: windowID,
+                title: title,
+                image: nil,
+                documentURL: nil,
+                bounds: bounds,
+                ownerPID: pid,
+                isMinimized: false,
+                isFocused: isFocused,
+                axElement: nil,
+                chromeProfile: chromeProfile
+            ))
         }
         
         return windows
     }
-    
-    private static func getMinimizedWindowImage(app: NSRunningApplication, axWindow: AXUIElement) -> NSImage? {
-        // Try to get the minimized window's dock image (Dock stores a preview)
-        // Unfortunately, this isn't directly accessible via public APIs
-        // Fall back to app icon with a minimized overlay
-        
-        guard let appIcon = app.icon else { return nil }
-        
-        // Create a composite image with minimized indicator
-        let size = NSSize(width: 128, height: 80)
-        let image = NSImage(size: size)
-        
-        image.lockFocus()
-        
-        // Draw a dark background
-        NSColor(white: 0.2, alpha: 1.0).setFill()
-        NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 8, yRadius: 8).fill()
-        
-        // Draw app icon centered
-        let iconSize: CGFloat = 48
-        let iconRect = NSRect(
-            x: (size.width - iconSize) / 2,
-            y: (size.height - iconSize) / 2 + 8,
-            width: iconSize,
-            height: iconSize
-        )
-        appIcon.draw(in: iconRect)
-        
-        // Draw "minimized" indicator
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.8),
-            .paragraphStyle: paragraphStyle
-        ]
-        let text = "Minimized"
-        let textRect = NSRect(x: 0, y: 4, width: size.width, height: 16)
-        text.draw(in: textRect, withAttributes: attrs)
-        
-        image.unlockFocus()
-        
-        return image
-    }
-    
-    private static func captureWindowImage(windowID: CGWindowID, bounds: CGRect) -> NSImage? {
-        // Create image of the specific window
-        let imageOption: CGWindowListOption = [.optionIncludingWindow]
-        let imageBounds = CGRect.null // Capture full window
-        
-        guard let cgImage = CGWindowListCreateImage(imageBounds, imageOption, windowID, [.boundsIgnoreFraming, .bestResolution]) else {
-            print("Failed to capture image for window \(windowID)")
-            return nil
+
+    /// Captures optional previews with the modern macOS API. This is never called
+    /// unless the user has already granted Screen Recording permission.
+    @MainActor
+    static func capturePreviews(for windows: [AppWindow]) async -> [CGWindowID: NSImage] {
+        guard isScreenCaptureAuthorized else { return [:] }
+
+        let candidates = windows.filter { !$0.isMinimized }
+        guard !candidates.isEmpty else { return [:] }
+
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(
+                true,
+                onScreenWindowsOnly: false
+            )
+            let shareableByID = Dictionary(
+                uniqueKeysWithValues: content.windows.map { ($0.windowID, $0) }
+            )
+            var previews: [CGWindowID: NSImage] = [:]
+
+            for window in candidates {
+                guard !Task.isCancelled else { break }
+                guard let shareableWindow = matchingShareableWindow(
+                    for: window,
+                    directMatches: shareableByID,
+                    allWindows: content.windows
+                ) else {
+                    print("No ScreenCaptureKit window match for: \(window.title) [\(window.id)]")
+                    continue
+                }
+
+                let configuration = SCStreamConfiguration()
+                let sourceWidth = max(window.bounds.width, 1)
+                let sourceHeight = max(window.bounds.height, 1)
+                let targetWidth = min(sourceWidth, 640)
+                configuration.width = Int(targetWidth.rounded())
+                configuration.height = Int((targetWidth * sourceHeight / sourceWidth).rounded())
+                configuration.showsCursor = false
+
+                let filter = SCContentFilter(desktopIndependentWindow: shareableWindow)
+                for attempt in 0..<3 {
+                    guard !Task.isCancelled else { break }
+                    do {
+                        let cgImage = try await SCScreenshotManager.captureImage(
+                            contentFilter: filter,
+                            configuration: configuration
+                        )
+                        previews[window.id] = NSImage(
+                            cgImage: cgImage,
+                            size: NSSize(width: cgImage.width, height: cgImage.height)
+                        )
+                        break
+                    } catch {
+                        print(
+                            "Preview attempt \(attempt + 1) failed for \(window.title): "
+                                + error.localizedDescription
+                        )
+                        if attempt < 2 {
+                            try? await Task.sleep(
+                                nanoseconds: UInt64(90_000_000 * (attempt + 1))
+                            )
+                        }
+                    }
+                }
+            }
+
+            return previews
+        } catch {
+            print("Could not load window previews: \(error.localizedDescription)")
+            return [:]
         }
-        
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    private static func matchingShareableWindow(
+        for window: AppWindow,
+        directMatches: [CGWindowID: SCWindow],
+        allWindows: [SCWindow]
+    ) -> SCWindow? {
+        if let direct = directMatches[window.id] {
+            return direct
+        }
+
+        let candidates = allWindows.filter {
+            $0.owningApplication?.processID == window.ownerPID && $0.windowLayer == 0
+        }
+        if candidates.count == 1 {
+            return candidates[0]
+        }
+
+        return candidates.max { lhs, rhs in
+            shareableMatchScore(lhs, for: window) < shareableMatchScore(rhs, for: window)
+        }
+    }
+
+    private static func shareableMatchScore(_ candidate: SCWindow, for window: AppWindow) -> CGFloat {
+        var score: CGFloat = 0
+        if let title = candidate.title, !title.isEmpty, title == window.title {
+            score += 100
+        }
+
+        let frame = candidate.frame
+        let sizeDelta = abs(frame.width - window.bounds.width) + abs(frame.height - window.bounds.height)
+        let positionDelta = abs(frame.minX - window.bounds.minX) + abs(frame.minY - window.bounds.minY)
+        score += max(0, 60 - sizeDelta)
+        score += max(0, 40 - positionDelta / 2)
+        return score
     }
     
     static func activateWindow(window: AppWindow) {
@@ -401,7 +461,7 @@ class WindowFetcher {
             }
             
             // Activate the app
-            app?.activate(options: [.activateIgnoringOtherApps])
+            app?.activate(options: [.activateAllWindows])
             
             // Raise the specific window
             let raiseResult = AXUIElementPerformAction(axElement, kAXRaiseAction as CFString)
@@ -413,7 +473,7 @@ class WindowFetcher {
         } else {
             // Fallback: just activate the app (rare case - shouldn't happen with new code)
             print("Warning: No AXUIElement stored, just activating app")
-            app?.activate(options: [.activateIgnoringOtherApps])
+            app?.activate(options: [.activateAllWindows])
         }
     }
     
@@ -424,10 +484,6 @@ class WindowFetcher {
             print("Warning: No AXUIElement stored, cannot close window")
             return
         }
-        
-        // Remove from cache
-        let cacheKeyStr = cacheKey(pid: window.ownerPID, title: window.title)
-        imageCache.removeValue(forKey: cacheKeyStr)
         
         // Get the close button and press it
         var closeButton: AnyObject?
@@ -465,7 +521,7 @@ class WindowFetcher {
         
         // First, activate the window
         let app = NSRunningApplication(processIdentifier: window.ownerPID)
-        app?.activate(options: [.activateIgnoringOtherApps])
+        app?.activate(options: [.activateAllWindows])
         AXUIElementPerformAction(axElement, kAXRaiseAction as CFString)
         
         // Get the visible frame (screen minus dock and menu bar)
@@ -503,9 +559,6 @@ class WindowFetcher {
         print("Killing process for window: \(window.title)")
         
         let pid = window.ownerPID
-        
-        // Clear cache for this process
-        clearCache(for: pid)
         
         // Use kill signal to terminate the process
         let result = kill(pid, SIGTERM)
