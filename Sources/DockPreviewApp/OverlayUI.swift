@@ -31,23 +31,6 @@ private struct OverlayMetrics {
     var cornerRadius: CGFloat { compact ? 12 : 15 }
 }
 
-private struct NativeMaterialView: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.state = .active
-    }
-}
-
 private struct TrafficLightButton: View {
     let color: Color
     let symbol: String
@@ -380,6 +363,17 @@ private struct UtilityRail: View {
     let onRequestVisualPreviews: () -> Void
     let onKill: () -> Void
 
+    private var visibleButtonCount: Int {
+        (showsBack ? 1 : 0)
+            + (showsPreviewPermission ? 1 : 0)
+            + (showsKill ? 1 : 0)
+    }
+
+    private var railHeight: CGFloat {
+        let count = max(visibleButtonCount, 1)
+        return CGFloat(count * 25 + max(count - 1, 0) * 5 + 10)
+    }
+
     var body: some View {
         VStack(spacing: 5) {
             if showsBack {
@@ -408,7 +402,9 @@ private struct UtilityRail: View {
                 )
             }
         }
-        .frame(width: metrics.utilityRailWidth, height: metrics.cardHeight)
+        .padding(.vertical, 5)
+        .frame(width: metrics.utilityRailWidth, height: railHeight)
+        .fixedSize(horizontal: false, vertical: true)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.white.opacity(0.045))
@@ -533,19 +529,22 @@ private struct WindowOverlayRoot: View {
             }
         }
         .frame(width: overlayWidth)
-        .background(NativeMaterialView(material: .popover))
+        .background {
+            RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+        }
         .clipShape(RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous))
+        .compositingGroup()
         .overlay {
             RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.34), radius: 18, y: 8)
         .environment(\.colorScheme, .dark)
     }
 
     private var windowsContent: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(alignment: .top, spacing: metrics.spacing) {
+            LazyHStack(alignment: .center, spacing: metrics.spacing) {
                 ForEach(model.windows, id: \.id) { window in
                     WindowPreviewCard(
                         window: window,
@@ -886,6 +885,10 @@ final class OverlayWindowManager: ObservableObject {
 
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.translatesAutoresizingMaskIntoConstraints = true
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingView.layer?.cornerCurve = .continuous
+        hostingView.layer?.masksToBounds = true
 
         let panel = DockPreviewPanel(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
@@ -1011,6 +1014,12 @@ final class OverlayWindowManager: ObservableObject {
         guard let panel, let hostingView, let icon = currentIcon else { return }
         let anchor = anchorContext(for: icon)
         model.maximumWidth = max(260, anchor.screen.visibleFrame.width - 24)
+
+        // NSHostingView is rectangular even when SwiftUI clips its contents. Mask
+        // the AppKit layer too so visual-effect materials cannot leak into the
+        // transparent corners of the borderless panel.
+        hostingView.layer?.cornerRadius = DockMonitor.shared.compactOverlayMode ? 12 : 15
+        hostingView.layer?.masksToBounds = true
 
         hostingView.invalidateIntrinsicContentSize()
         hostingView.layoutSubtreeIfNeeded()
