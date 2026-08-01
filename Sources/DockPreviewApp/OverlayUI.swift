@@ -161,6 +161,7 @@ private struct WindowPreviewCard: View {
     let window: AppWindow
     let screenCaptureAuthorized: Bool
     let previewFailed: Bool
+    let showsMetadata: Bool
     let metrics: OverlayMetrics
     let onSelect: () -> Void
     let onClose: () -> Void
@@ -252,21 +253,23 @@ private struct WindowPreviewCard: View {
                     .strokeBorder(borderColor, lineWidth: hovered || window.isFocused ? 1.5 : 1)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(window.title)
-                    .font(.system(size: metrics.compact ? 10 : 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            if showsMetadata {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(window.title)
+                        .font(.system(size: metrics.compact ? 10 : 12, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
 
-                Text(secondaryText)
-                    .font(.system(size: metrics.compact ? 8 : 9))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    Text(secondaryText)
+                        .font(.system(size: metrics.compact ? 8 : 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(width: metrics.cardWidth, height: metrics.titleAreaHeight, alignment: .leading)
+                .padding(.horizontal, 2)
             }
-            .frame(width: metrics.cardWidth, height: metrics.titleAreaHeight, alignment: .leading)
-            .padding(.horizontal, 2)
         }
         .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
         .background(
@@ -279,7 +282,7 @@ private struct WindowPreviewCard: View {
         .onDisappear { activationTask?.cancel() }
         .help(window.title)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(window.title), \(secondaryText)")
+        .accessibilityLabel(showsMetadata ? "\(window.title), \(secondaryText)" : window.title)
         .accessibilityHint("Click to activate this window")
     }
 
@@ -550,6 +553,7 @@ private struct WindowOverlayRoot: View {
                         window: window,
                         screenCaptureAuthorized: model.screenCaptureAuthorized,
                         previewFailed: model.failedPreviewIDs.contains(window.id),
+                        showsMetadata: showsWindowMetadata,
                         metrics: metrics,
                         onSelect: { onSelect(window) },
                         onClose: { onClose(window) },
@@ -590,7 +594,7 @@ private struct WindowOverlayRoot: View {
             }
             .padding(metrics.contentPadding)
         }
-        .frame(height: metrics.cardHeight + metrics.contentPadding * 2)
+        .frame(height: windowContentHeight + metrics.contentPadding * 2)
     }
 
     private var profilesContent: some View {
@@ -654,6 +658,21 @@ private struct WindowOverlayRoot: View {
     private var showsWindowUtilityRail: Bool {
         !model.windows.isEmpty
             && (!model.screenCaptureAuthorized || preferences.showKillButton)
+    }
+
+    private var showsWindowMetadata: Bool {
+        model.appName.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare("Google Chrome") == .orderedSame
+    }
+
+    private var windowContentHeight: CGFloat {
+        if showsWindowMetadata
+            || !model.chromeProfiles.isEmpty
+            || SpotifyController.isSpotify(model.appName)
+            || (CursorController.isCursor(model.appName) && preferences.cursorOverlayEnabled) {
+            return metrics.cardHeight
+        }
+        return metrics.previewHeight
     }
 }
 
