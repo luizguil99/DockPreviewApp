@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 
 // MARK: - Spotify Data Model
-class SpotifyState: ObservableObject {
+@MainActor
+final class SpotifyState: ObservableObject {
     @Published var trackName: String = ""
     @Published var artistName: String = ""
     @Published var albumArt: NSImage?
@@ -10,8 +11,61 @@ class SpotifyState: ObservableObject {
     @Published var position: Double = 0  // in seconds
     @Published var duration: Double = 0  // in seconds
     @Published var isLiked: Bool = false
-    
+
+    private struct Snapshot {
+        let trackName: String
+        let artistName: String
+        let artworkURL: String
+        let isPlaying: Bool
+        let position: Double
+        let duration: Double
+    }
+
+    private var clockTimer: Timer?
+    private var syncTimer: Timer?
+    private var lastClockUpdate = Date()
+    private var refreshInFlight = false
+    private var currentArtworkURL = ""
+
+    func startUpdating() {
+        guard clockTimer == nil, syncTimer == nil else { return }
+        lastClockUpdate = Date()
+        refresh()
+
+        let clock = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.advanceClock(to: Date())
+            }
+        }
+        RunLoop.main.add(clock, forMode: .common)
+        clockTimer = clock
+
+        let sync = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
+        RunLoop.main.add(sync, forMode: .common)
+        syncTimer = sync
+    }
+
+    func stopUpdating() {
+        clockTimer?.invalidate()
+        syncTimer?.invalidate()
+        clockTimer = nil
+        syncTimer = nil
+    }
+
+    func setPlayingOptimistically(_ playing: Bool) {
+        advanceClock(to: Date())
+        isPlaying = playing
+        lastClockUpdate = Date()
+    }
+
     func refresh() {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
+
         DispatchQueue.global(qos: .userInitiated).async {
             let script = """
             tell application "Spotify"
@@ -28,42 +82,75 @@ class SpotifyState: ObservableObject {
                 return {trackName, artistName, artworkUrl, isPlaying, trackPosition, trackDuration}
             end tell
             """
-            
+
             var error: NSDictionary?
+            var snapshot: Snapshot?
             if let scriptObject = NSAppleScript(source: script) {
                 let output = scriptObject.executeAndReturnError(&error)
-                
+
                 if error == nil {
-                    DispatchQueue.main.async {
-                        // Parse the output
-                        if let items = output.coerce(toDescriptorType: typeAEList) {
-                            let count = items.numberOfItems
-                            if count >= 6 {
-                                self.trackName = items.atIndex(1)?.stringValue ?? ""
-                                self.artistName = items.atIndex(2)?.stringValue ?? ""
-                                let artworkUrl = items.atIndex(3)?.stringValue ?? ""
-                                self.isPlaying = items.atIndex(4)?.booleanValue ?? false
-                                self.position = Double(items.atIndex(5)?.int32Value ?? 0)
-                                self.duration = Double(items.atIndex(6)?.int32Value ?? 0) / 1000.0
-                                
-                                // Load artwork
-                                if !artworkUrl.isEmpty {
-                                    self.loadArtwork(from: artworkUrl)
-                                }
-                            }
-                        }
+                    if let items = output.coerce(toDescriptorType: typeAEList),
+                       items.numberOfItems >= 6 {
+                        snapshot = Snapshot(
+                            trackName: items.atIndex(1)?.stringValue ?? "",
+                            artistName: items.atIndex(2)?.stringValue ?? "",
+                            artworkURL: items.atIndex(3)?.stringValue ?? "",
+                            isPlaying: items.atIndex(4)?.booleanValue ?? false,
+                            position: items.atIndex(5)?.doubleValue ?? 0,
+                            duration: (items.atIndex(6)?.doubleValue ?? 0) / 1000.0
+                        )
                     }
+                }
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.refreshInFlight = false
+                if let snapshot {
+                    self.apply(snapshot)
+                } else if let error {
+                    print("Could not refresh Spotify state: \(error)")
                 }
             }
         }
     }
-    
+
+    private func apply(_ snapshot: Snapshot) {
+        trackName = snapshot.trackName
+        artistName = snapshot.artistName
+        isPlaying = snapshot.isPlaying
+        duration = max(0, snapshot.duration)
+        position = clampedPosition(snapshot.position)
+        lastClockUpdate = Date()
+
+        guard snapshot.artworkURL != currentArtworkURL else { return }
+        currentArtworkURL = snapshot.artworkURL
+        albumArt = nil
+        if !snapshot.artworkURL.isEmpty {
+            loadArtwork(from: snapshot.artworkURL)
+        }
+    }
+
+    private func advanceClock(to now: Date) {
+        let elapsed = max(0, now.timeIntervalSince(lastClockUpdate))
+        lastClockUpdate = now
+        guard isPlaying else { return }
+        position = clampedPosition(position + elapsed)
+    }
+
+    private func clampedPosition(_ value: Double) -> Double {
+        let nonnegative = max(0, value)
+        guard duration > 0 else { return nonnegative }
+        return min(nonnegative, duration)
+    }
+
     private func loadArtwork(from urlString: String) {
         guard let url = URL(string: urlString) else { return }
-        
+
         URLSession.shared.dataTask(with: url) { data, _, _ in
             if let data = data, let image = NSImage(data: data) {
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.currentArtworkURL == urlString else { return }
                     self.albumArt = image
                 }
             }
@@ -139,7 +226,7 @@ struct SpotifyMiniPlayerCard: View {
                             // Progress
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(spotifyGreen)
-                                .frame(width: state.duration > 0 ? geo.size.width * CGFloat(state.position / state.duration) : 0, height: 3)
+                                .frame(width: geo.size.width * progressFraction, height: 3)
                         }
                     }
                     .frame(height: 3)
@@ -150,7 +237,7 @@ struct SpotifyMiniPlayerCard: View {
                             .font(.system(size: DockMonitor.shared.compactOverlayMode ? 8 : 9))
                             .foregroundColor(.white.opacity(0.5))
                         Spacer()
-                        Text("-\(formatTime(state.duration - state.position))")
+                        Text("-\(formatTime(max(0, state.duration - state.position)))")
                             .font(.system(size: DockMonitor.shared.compactOverlayMode ? 8 : 9))
                             .foregroundColor(.white.opacity(0.5))
                     }
@@ -170,7 +257,8 @@ struct SpotifyMiniPlayerCard: View {
                 // Play/Pause
                 controlButton(icon: state.isPlaying ? "pause.fill" : "play.fill", id: "play", size: DockMonitor.shared.compactOverlayMode ? 16 : 20) {
                     SpotifyController.playPause()
-                    state.isPlaying.toggle()
+                    state.setPlayingOptimistically(!state.isPlaying)
+                    refreshAfterDelay()
                 }
                 
                 // Next
@@ -210,15 +298,8 @@ struct SpotifyMiniPlayerCard: View {
         .scaleEffect(isHovered ? 1.02 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { h in isHovered = h }
-        .onAppear {
-            state.refresh()
-            // Auto refresh every 1 second
-            Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                if state.isPlaying {
-                    state.position += 1
-                }
-            }
-        }
+        .onAppear { state.startUpdating() }
+        .onDisappear { state.stopUpdating() }
     }
     
     private func controlButton(icon: String, id: String, size: CGFloat, action: @escaping () -> Void) -> some View {
@@ -234,13 +315,22 @@ struct SpotifyMiniPlayerCard: View {
     }
     
     private func formatTime(_ seconds: Double) -> String {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
+        let safeSeconds = max(0, seconds.isFinite ? seconds : 0)
+        let mins = Int(safeSeconds) / 60
+        let secs = Int(safeSeconds) % 60
         return String(format: "%d:%02d", mins, secs)
+    }
+
+    private var progressFraction: CGFloat {
+        guard state.duration > 0 else { return 0 }
+        return CGFloat(min(max(state.position / state.duration, 0), 1))
     }
     
     private func refreshAfterDelay() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            state.refresh()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             state.refresh()
         }
     }
