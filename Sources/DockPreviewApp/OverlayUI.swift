@@ -26,6 +26,8 @@ private struct OverlayMetrics {
     var cardHeight: CGFloat { previewHeight + titleAreaHeight }
     var profileShortcutWidth: CGFloat { compact ? 72 : 90 }
     var utilityRailWidth: CGFloat { compact ? 34 : 38 }
+    var spotifyCardWidth: CGFloat { compact ? 180 : 220 }
+    var spotifyCardHeight: CGFloat { compact ? 95 : 120 }
     var spacing: CGFloat { compact ? 6 : 8 }
     var contentPadding: CGFloat { compact ? 7 : 10 }
     var cornerRadius: CGFloat { compact ? 12 : 15 }
@@ -572,7 +574,7 @@ private struct WindowOverlayRoot: View {
 
                 if SpotifyController.isSpotify(model.appName) {
                     SpotifyMiniPlayerCard()
-                        .frame(height: metrics.cardHeight, alignment: .center)
+                        .frame(height: metrics.spotifyCardHeight, alignment: .center)
                 }
 
                 if CursorController.isCursor(model.appName), preferences.cursorOverlayEnabled {
@@ -641,7 +643,7 @@ private struct WindowOverlayRoot: View {
                 width += metrics.profileShortcutWidth + metrics.spacing
             }
             if SpotifyController.isSpotify(model.appName) {
-                width += (metrics.compact ? 180 : 210) + metrics.spacing
+                width += metrics.spotifyCardWidth + metrics.spacing
             }
             if CursorController.isCursor(model.appName), preferences.cursorOverlayEnabled {
                 width += (metrics.compact ? 124 : 148) + metrics.spacing
@@ -668,9 +670,11 @@ private struct WindowOverlayRoot: View {
     private var windowContentHeight: CGFloat {
         if showsWindowMetadata
             || !model.chromeProfiles.isEmpty
-            || SpotifyController.isSpotify(model.appName)
             || (CursorController.isCursor(model.appName) && preferences.cursorOverlayEnabled) {
             return metrics.cardHeight
+        }
+        if SpotifyController.isSpotify(model.appName) {
+            return max(metrics.previewHeight, metrics.spotifyCardHeight)
         }
         return metrics.previewHeight
     }
